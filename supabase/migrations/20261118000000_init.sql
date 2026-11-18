@@ -143,7 +143,7 @@ create index on public.evidence_packets (unit_id);
 
 -- ── Profile row for every new auth user ───────────────────────────────
 -- Role comes from app_metadata (admin-only), never user_metadata, so nobody can sign up as 'agent'.
-create function public.handle_new_user() returns trigger
+create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   insert into public.users (id, role, display_name)
@@ -155,6 +155,7 @@ begin
   return new;
 end $$;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users for each row execute function public.handle_new_user();
 
