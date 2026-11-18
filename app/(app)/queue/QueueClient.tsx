@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { ArrowRight, Camera, Inbox, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { CaptureStatus } from "@/components/CaptureStatus";
+import { EmptyState } from "@/components/EmptyState";
 import { HashChip } from "@/components/HashChip";
 import { formatTime } from "@/lib/format";
 import { t } from "@/lib/i18n";
@@ -31,36 +32,44 @@ export function QueueClient() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="card flex items-center justify-between gap-3 p-3 pl-4">
         <span className={`inline-flex items-center gap-2 text-sm font-medium ${online ? "text-ok-text" : "text-review-text"}`}>
+          <span className="relative flex size-2.5">
+            {online && <span className="absolute inset-0 animate-ping rounded-full bg-brand opacity-60" />}
+            <span className={`relative size-2.5 rounded-full ${online ? "bg-brand" : "bg-accent"}`} />
+          </span>
           {online ? <Wifi aria-hidden className="size-4" /> : <WifiOff aria-hidden className="size-4" />}
           {online ? t("queue.online") : t("queue.offline")}
         </span>
-        <button
-          onClick={syncNow}
-          disabled={!online || syncing}
-          className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-brand px-4 font-semibold text-brand-ink disabled:opacity-50"
-        >
-          <RefreshCw aria-hidden className={`size-5 ${syncing ? "animate-spin" : ""}`} /> {t("queue.syncNow")}
+        <button onClick={syncNow} disabled={!online || syncing} className="btn btn-primary min-h-10 shrink-0 px-4 text-sm shadow-none">
+          <RefreshCw aria-hidden className={`size-4 ${syncing ? "animate-spin" : ""}`} /> {t("queue.syncNow")}
         </button>
       </div>
 
-      {captures?.length === 0 && <p className="text-muted">{t("queue.empty")}</p>}
+      {captures?.length === 0 && (
+        <EmptyState icon={Inbox} title={t("queue.empty")} body={t("queue.empty.body")}>
+          <Link href="/capture" className="btn btn-primary mt-2">
+            <Camera aria-hidden className="size-5" /> {t("home.capture")}
+          </Link>
+        </EmptyState>
+      )}
 
-      <ul className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-3 stagger">
         {captures?.map((c) => (
-          <li key={c.localId} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+          <li key={c.localId} className="card flex flex-col gap-3 p-4">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-sm font-semibold">{codes[c.unitId] ?? "—"}</span>
+              <span className="rounded-md bg-surface-2 px-2 py-0.5 font-mono text-xs font-semibold">{codes[c.unitId] ?? "—"}</span>
               <span className="text-xs text-muted">{formatTime(c.capturedAt)}</span>
             </div>
             <HashChip hash={c.sha256} />
-            <CaptureStatus item={c} online={online} />
-            {c.status === "done" && c.photoId && (
-              <Link href={`/review/${c.photoId}`} className="font-medium text-brand">
-                {t("capture.seeResult")} →
-              </Link>
-            )}
+            <div className="flex items-center justify-between gap-2">
+              <CaptureStatus item={c} online={online} />
+              {c.status === "done" && c.photoId && (
+                <Link href={`/review/${c.photoId}`} className="inline-flex items-center gap-1 text-sm font-semibold text-brand">
+                  {t("capture.seeResult")} <ArrowRight aria-hidden className="size-4" />
+                </Link>
+              )}
+            </div>
           </li>
         ))}
       </ul>

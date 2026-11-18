@@ -12,7 +12,7 @@ don't match the wall.
 ## Setup
 
 1. `npm install`
-2. Create a Supabase project. Copy `.env.local.example` to `.env.local` and fill in the URL and keys.
+2. Create a Supabase project. Copy `.env.local.example` to `.env` and fill in the URL and keys (including `SUPABASE_SERVICE_ROLE_KEY`, which the seed script needs).
 3. Supabase dashboard → **SQL Editor** → paste and run `supabase/migrations/20261118000000_init.sql`.
 4. `npm run seed`: creates 5 demo accounts and 5 simulated polling units.
 5. `npm run dev` → http://localhost:3000
@@ -43,7 +43,7 @@ don't match the wall.
 ## Demo accounts (after seeding)
 
 `witness1@demo.countrack.test`, `witness2@…`, `witness3@…`, `agent1@…`, `observer1@…`.
-The password is `DEMO_PASSWORD` from `.env.local`.
+The password is `DEMO_PASSWORD` from `.env` (default `countrack-demo`).
 
 ## Seeded units
 

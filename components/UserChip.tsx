@@ -1,35 +1,43 @@
 import Link from "next/link";
-import { CircleUserRound } from "lucide-react";
-import { signOut } from "@/app/login/actions";
+import { LogOut } from "lucide-react";
+import { signOut } from "@/app/(app)/login/actions";
 import { t } from "@/lib/i18n";
 import { userClient } from "@/lib/supabase/server";
 
-/** Shows who is signed in, with switch/sign-out. Dynamic: render inside <Suspense>. */
+/** Who is signed in (header), with sign-out. Dynamic: render inside <Suspense>. */
 export async function UserChip() {
   const supabase = await userClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user)
     return (
-      <Link href="/login" className="inline-flex min-h-11 items-center gap-2 font-medium text-brand">
-        <CircleUserRound aria-hidden className="size-5" /> {t("login.signIn")}
+      <Link href="/login" className="btn btn-outline-light min-h-9 px-4 text-sm">
+        {t("login.signIn")}
       </Link>
     );
 
   const { data: profile } = await supabase.from("users").select("display_name, role").eq("id", user.id).maybeSingle();
-  const name = profile?.display_name ?? (user.is_anonymous ? t("login.anonymousName") : user.email);
+  const name: string = profile?.display_name ?? (user.is_anonymous ? t("login.anonymousName") : (user.email ?? "?"));
+  const initials = name.replace(/[^A-Za-z0-9 ]/g, "").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const role = profile?.role ? t(`role.${profile.role}` as "role.witness") : null;
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-xl bg-surface px-3 py-2 text-sm shadow-sm">
-      <span className="flex min-w-0 items-center gap-2">
-        <CircleUserRound aria-hidden className="size-5 shrink-0 text-brand" />
-        <span className="truncate">
-          {name}
-          {profile?.role && <span className="text-muted"> · {t(`role.${profile.role}` as "role.witness")}</span>}
+    <div className="flex items-center gap-1 rounded-full bg-frame-ink/10 py-1 pr-1 pl-1 text-frame-ink">
+      <Link href="/login" className="flex min-w-0 items-center gap-2 rounded-full pr-1" title={t("login.switch")}>
+        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent text-xs font-bold text-black">{initials || "?"}</span>
+        <span className="hidden min-w-0 flex-col gap-0.5 leading-none sm:flex">
+          <span className="max-w-28 truncate text-xs font-semibold">{name}</span>
+          {role && <span className="text-[10px] text-frame-muted">{role}</span>}
         </span>
-      </span>
+      </Link>
       <form action={signOut}>
-        <button className="min-h-11 px-2 font-medium text-brand">{t("login.switch")}</button>
+        <button
+          aria-label={t("login.signOut")}
+          title={t("login.signOut")}
+          className="grid size-7 place-items-center rounded-full text-frame-muted hover:bg-frame-ink/10 hover:text-frame-ink"
+        >
+          <LogOut aria-hidden className="size-3.5" />
+        </button>
       </form>
     </div>
   );

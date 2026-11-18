@@ -15,7 +15,7 @@ import type { ExtractedResult, PartyScores, Reading } from "../lib/schemas";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !serviceKey) throw new Error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local");
+if (!url || !serviceKey) throw new Error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env (Supabase → Project Settings → API → service_role key)");
 
 const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 const PASSWORD = process.env.DEMO_PASSWORD ?? "countrack-demo";

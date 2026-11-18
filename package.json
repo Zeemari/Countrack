@@ -9,9 +9,9 @@
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit",
-    "seed": "tsx --env-file=.env.local supabase/seed.ts",
+    "seed": "tsx --env-file=.env supabase/seed.ts",
     "icons": "tsx scripts/make-icons.ts",
-    "fixture": "tsx --env-file=.env.local scripts/record-fixture.ts"
+    "fixture": "tsx --env-file=.env scripts/record-fixture.ts"
   },
   "engines": {
     "node": ">=22"

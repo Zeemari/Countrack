@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
-import { BackLink } from "@/components/BackLink";
+import { ArrowRight, Lock } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 import { COLLATION_ROLES } from "@/lib/demo-users";
 import { t } from "@/lib/i18n";
 import { userClient } from "@/lib/supabase/server";
@@ -9,14 +10,14 @@ import { CollationForm, type FormUnit } from "./CollationForm";
 
 export default function CollationPage() {
   return (
-    <div className="flex flex-col gap-4 pt-4">
-      <BackLink href="/" />
-      <h1 className="text-2xl font-bold">{t("collation.title")}</h1>
-      <p className="text-muted">{t("collation.hint")}</p>
-      <Suspense fallback={<p className="text-muted">{t("common.loading")}</p>}>
-        <Gate />
-      </Suspense>
-    </div>
+    <>
+      <PageHeader title={t("collation.title")} subtitle={t("collation.hint")} />
+      <div className="w-full max-w-2xl">
+        <Suspense fallback={<div className="card h-64 animate-pulse" />}>
+          <Gate />
+        </Suspense>
+      </div>
+    </>
   );
 }
 
@@ -31,9 +32,15 @@ async function Gate() {
 
   if (!profile || !(COLLATION_ROLES as readonly string[]).includes(profile.role))
     return (
-      <Link href="/login?next=/collation" className="rounded-2xl bg-brand p-4 text-center font-semibold text-brand-ink">
-        {t("collation.signInAs")}
-      </Link>
+      <div className="card flex flex-col items-center gap-4 px-6 py-10 text-center animate-rise">
+        <span className="grid size-14 place-items-center rounded-2xl bg-sim-bg text-sim-text">
+          <Lock aria-hidden className="size-7" />
+        </span>
+        <p className="max-w-xs text-muted">{t("collation.restricted")}</p>
+        <Link href="/login?next=/collation" className="btn btn-primary w-full">
+          {t("collation.signInAs")} <ArrowRight aria-hidden className="size-5" />
+        </Link>
+      </div>
     );
 
   const { data } = await supabase

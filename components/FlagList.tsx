@@ -6,7 +6,7 @@ import type { CheckFlag } from "@/lib/schemas";
 export function FlagList({ flags }: { flags: CheckFlag[] }) {
   if (!flags.length)
     return (
-      <p className="flex items-center gap-2 rounded-lg bg-ok-bg px-3 py-2 text-sm font-medium text-ok-text">
+      <p className="flex items-center gap-2 rounded-xl bg-ok-bg px-3 py-2.5 text-sm font-medium text-ok-text">
         <CircleCheck aria-hidden className="size-4 shrink-0" /> {t("flag.allPass")}
       </p>
     );
@@ -21,7 +21,7 @@ export function FlagList({ flags }: { flags: CheckFlag[] }) {
               ? ` (${f.field})`
               : "";
         return (
-          <li key={i} className="flex items-start gap-2 rounded-lg bg-review-bg px-3 py-2 text-sm text-review-text">
+          <li key={i} className="flex items-start gap-2 rounded-xl bg-review-bg px-3 py-2.5 text-sm text-review-text">
             <Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
             <span>{t(`flag.${f.code}`)}{detail}</span>
           </li>

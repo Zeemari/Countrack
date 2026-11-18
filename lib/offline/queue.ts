@@ -1,7 +1,8 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { QueuedCapture } from "../schemas";
 
-export type CachedUnit = { id: string; code: string; name: string; ward: string };
+/** state/lga are optional: units cached by older versions only had the ward. */
+export type CachedUnit = { id: string; code: string; name: string; ward: string; lga?: string; state?: string };
 
 interface CounTrackDB extends DBSchema {
   captures: { key: string; value: QueuedCapture };
