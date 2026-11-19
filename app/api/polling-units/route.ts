@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { publicClient } from "@/lib/supabase/server";
 
 const SOURCE = "INEC CVR portal via the community-maintained nigeria-inec-geo snapshot";
@@ -29,6 +29,7 @@ function safeFilter(value: string | null, name: string): string | null | Respons
 
 /** Public real-world directory API. Supports exact PVC PU code lookup and paginated text search. */
 export async function GET(request: Request) {
+  await connection(); // per request, never prerendered at build time
   const params = new URL(request.url).searchParams;
   const level = params.get("level");
   const rawCode = params.get("code");

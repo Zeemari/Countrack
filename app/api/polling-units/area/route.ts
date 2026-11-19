@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { PAGE_SIZE, type AreaResponse, type AreaUnitTuple } from "@/lib/directory";
 import { publicClient } from "@/lib/supabase/server";
 
@@ -7,6 +7,7 @@ type Row = { id: string; code: string; name: string; location: string | null; lg
 
 /** Every real polling unit in one state, compact, so a phone can work offline anywhere in that state. */
 export async function GET(req: Request) {
+  await connection(); // per request, never prerendered at build time
   const state = new URL(req.url).searchParams.get("state")?.trim() ?? "";
   if (!SAFE.test(state)) return NextResponse.json({ error: "state is required" }, { status: 400 });
 

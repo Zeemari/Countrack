@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { publicClient } from "@/lib/supabase/server";
 
 const SAFE = /^[\p{L}\p{N} .,'’&()/-]+$/u;
 
 /** Type-ahead search over every polling unit (real directory and simulated demo units). */
 export async function GET(req: Request) {
+  await connection(); // per request, never prerendered at build time
   const q = new URL(req.url).searchParams.get("q")?.trim() ?? "";
   if (q.length < 2) return NextResponse.json({ units: [] });
   if (q.length > 80 || !SAFE.test(q)) return NextResponse.json({ error: "Invalid search" }, { status: 400 });

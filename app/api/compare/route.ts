@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { diffScores } from "@/lib/rules/diff";
 import { CompareQuery, ExtractedResult, PartyScores } from "@/lib/schemas";
 import { recomputeUnit } from "@/lib/server/recompute";
@@ -9,6 +9,7 @@ import { publicClient } from "@/lib/supabase/server";
  * party by party. The same comparison the discrepancy check stores.
  */
 export async function GET(req: Request) {
+  await connection(); // per request, never prerendered at build time
   const sp = new URL(req.url).searchParams;
   const query = CompareQuery.safeParse({ code: sp.get("code"), election: sp.get("election") ?? "presidential" });
   if (!query.success) return NextResponse.json({ error: "Choose a polling unit" }, { status: 400 });

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { Election } from "@/lib/elections";
 import { getElections, getLgas, getUnit, getUnits, getWards, IREV_SOURCE, IrevError } from "@/lib/irev/client";
 import { IREV_ID } from "@/lib/irev/map";
@@ -24,6 +24,7 @@ const bad = (error: string, status = 400) => NextResponse.json({ error }, { stat
  * `state` is the INEC state code (as in PU codes, FCT = 37). IReV ids are passed through as-is.
  */
 export async function GET(req: Request) {
+  await connection(); // per request, never prerendered at build time
   const sp = new URL(req.url).searchParams;
   const level = sp.get("level") as Level | null;
   if (!level || !LEVELS.includes(level)) return bad(`level must be one of ${LEVELS.join(", ")}`);

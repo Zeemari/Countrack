@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { INCIDENTS } from "@/lib/sms/incidents";
 
 export async function GET() {
+  await connection(); // per request, never prerendered at build time
   const { data, error } = await adminClient()
     .from("sms_incident_reports")
     .select("id, incident_code, source, received_at, polling_units(code, name, ward, lga, state)")

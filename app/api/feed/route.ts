@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { Election } from "@/lib/elections";
 import type { FeedEvent, FeedUnit } from "@/lib/feed";
 import { adminClient } from "@/lib/supabase/admin";
@@ -16,6 +16,8 @@ type IncidentFeedRow = { unit_id: string; incident_code: "VUB" | "VIO" | "MSB" |
 
 /** Latest public activity across all units: photos sealed, units verified or needing review, mismatches. */
 export async function GET(req: Request) {
+  // Always per request: never prerendered at build time (it reads the URL and refreshes results).
+  await connection();
   try {
     await recomputeMaturedUnits();
   } catch (error) {

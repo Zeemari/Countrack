@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { getUnit, IrevError } from "@/lib/irev/client";
 import { IREV_ID } from "@/lib/irev/map";
 
@@ -11,6 +12,7 @@ const MAX_BYTES = 25 * 1024 * 1024;
  * the vision reader can use it same-origin. Add download=1 to save it as a file.
  */
 export async function GET(req: Request) {
+  await connection(); // per request, never prerendered at build time
   const sp = new URL(req.url).searchParams;
   const electionId = sp.get("electionId") ?? "";
   const pu = sp.get("pu") ?? "";
