@@ -7,6 +7,7 @@ import { ELECTIONS, type Election } from "@/lib/elections";
 import type { FeedEvent, FeedKind } from "@/lib/feed";
 import { photoUrl, shortHash, signed } from "@/lib/format";
 import { t, type MessageKey } from "@/lib/i18n";
+import { readIncidentFeed, saveIncidentFeed } from "@/lib/offline/incident-feed";
 
 const POLL_MS = 20_000;
 const PAGE = 8;
@@ -34,6 +35,7 @@ const KINDS: { key: FeedKind | "all"; label: MessageKey }[] = [
   { key: "verified", label: "feed.kind.verified" },
   { key: "flagged", label: "feed.kind.flagged" },
   { key: "mismatch", label: "feed.kind.mismatch" },
+  { key: "incident", label: "feed.kind.incidentReport" },
 ];
 
 /**
@@ -45,10 +47,29 @@ export function LiveFeed() {
   const [election, setElection] = useState<Election | "all">("all");
   const [kind, setKind] = useState<FeedKind | "all">("all");
   const [events, setEvents] = useState<FeedEvent[] | null>(null);
+  const [cachedIncidents, setCachedIncidents] = useState<Extract<FeedEvent, { kind: "incident" }>[]>([]);
+  const [incidentCacheAt, setIncidentCacheAt] = useState<number | null>(null);
+  const [online, setOnline] = useState(true);
   const [failed, setFailed] = useState(false);
   const [shown, setShown] = useState(PAGE);
   const seen = useRef(new Set<string>());
   const [fresh, setFresh] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const cached = readIncidentFeed();
+    if (cached) {
+      setCachedIncidents(cached.events);
+      setIncidentCacheAt(cached.savedAt);
+    }
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -64,6 +85,11 @@ export function LiveFeed() {
         body.events.forEach((e) => seen.current.add(e.id));
         setFresh(first ? new Set() : incoming);
         setEvents(body.events);
+        const snapshot = saveIncidentFeed(body.events);
+        if (snapshot) {
+          setCachedIncidents(snapshot.events);
+          setIncidentCacheAt(snapshot.savedAt);
+        }
         setFailed(false);
       } catch {
         if (active) setFailed(true);
@@ -74,7 +100,12 @@ export function LiveFeed() {
     return () => { active = false; window.clearInterval(id); };
   }, [election]);
 
-  const list = (events ?? []).filter((e) => kind === "all" || e.kind === kind);
+  const usingCachedIncidents = kind === "incident" && (!online || failed);
+  const sourceEvents = usingCachedIncidents && cachedIncidents.length > 0 ? cachedIncidents : (events ?? []);
+  const list = sourceEvents.filter((e) => kind === "all" || e.kind === kind);
+  const hasOfflineIncidentData = kind === "incident" && incidentCacheAt !== null;
+  const incidentSnapshotUnavailable = kind === "incident" && (!online || failed) && incidentCacheAt === null && events === null;
+  const cacheLabel = incidentCacheAt ? new Date(incidentCacheAt).toLocaleString() : "";
 
   return (
     <section id="live" className="panel scroll-mt-20 px-4 py-14 md:px-12 md:py-24">
@@ -101,11 +132,19 @@ export function LiveFeed() {
           <Chips label={t("feed.kind.label")} value={kind} options={KINDS.map((k) => [k.key, t(k.label)])} onChange={(v) => { setKind(v); setShown(PAGE); }} small />
         </div>
 
-        {events === null && !failed ? (
+        {usingCachedIncidents && hasOfflineIncidentData && (
+          <p role="status" className="rounded-xl bg-sim-bg p-3 text-sm text-sim-text">
+            {t("feed.incidentCached", { time: cacheLabel })}
+          </p>
+        )}
+
+        {incidentSnapshotUnavailable ? (
+          <p role="status" className="rounded-xl bg-surface-2 p-4 text-center text-sm text-muted">{t("feed.incidentNoCache")}</p>
+        ) : events === null && !failed && !hasOfflineIncidentData ? (
           <ul className="flex flex-col gap-3" aria-label={t("common.loading")}>
             {[0, 1, 2].map((i) => <li key={i} className="card h-22 animate-pulse" />)}
           </ul>
-        ) : failed && !events ? (
+        ) : failed && !events && !hasOfflineIncidentData ? (
           <p className="rounded-2xl bg-review-bg p-4 text-center text-sm text-review-text">{t("feed.failed")}</p>
         ) : list.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-[1.5rem] border border-dashed border-border px-6 py-12 text-center">
@@ -156,15 +195,17 @@ const TONE = {
   verified: { icon: CircleCheck, tile: "bg-brand text-brand-ink" },
   flagged: { icon: TriangleAlert, tile: "bg-review-bg text-review-text" },
   mismatch: { icon: Scale, tile: "bg-blush text-frame" },
+  incident: { icon: TriangleAlert, tile: "bg-review-bg text-review-text" },
 } as const;
 
 function Item({ e, now, fresh }: { e: FeedEvent; now: number; fresh: boolean }) {
   const { icon: Icon, tile } = TONE[e.kind];
-  const href = e.kind === "photo" ? `/review/${e.photoId}` : `/units/${encodeURIComponent(e.unit.code)}?election=${e.election}`;
+  const href = e.kind === "photo" ? `/review/${e.photoId}` : e.kind === "incident" ? `/units/${encodeURIComponent(e.unit.code)}` : `/units/${encodeURIComponent(e.unit.code)}?election=${e.election}`;
   const where = [e.unit.ward, e.unit.lga, e.unit.state].filter(Boolean).join(" · ");
 
   let headline: string;
-  if (e.kind === "photo") headline = t("feed.photo", { unit: e.unit.name });
+  if (e.kind === "incident") headline = t("feed.incident", { incident: INCIDENT_LABELS[e.incidentCode], unit: e.unit.name });
+  else if (e.kind === "photo") headline = t("feed.photo", { unit: e.unit.name });
   else if (e.kind === "verified") headline = t("feed.verified", { unit: e.unit.name, n: e.witnesses });
   else if (e.kind === "flagged") headline = t("feed.flagged", { unit: e.unit.name });
   else headline = t("feed.mismatch", { party: e.party, unit: e.unit.name });
@@ -183,8 +224,17 @@ function Item({ e, now, fresh }: { e: FeedEvent; now: number; fresh: boolean }) 
               <span className="font-bold text-review-text">({signed(e.announced - e.wall)})</span>
             </p>
           )}
+          {e.kind === "incident" && (
+            <p className="text-sm font-semibold text-review-text">
+              {e.reportCount === 1 ? t("feed.incidentCount.one") : t("feed.incidentCount.many", { n: e.reportCount })}
+              <span className="ml-2 rounded-full bg-sim-bg px-2 py-0.5 text-[10px] font-bold uppercase text-sim-text">
+                {t(e.source === "demo" ? "feed.simulated" : e.source === "at_sandbox" ? "feed.sandbox" : "feed.testData")}
+              </span>
+              <span className="ml-2 rounded-full bg-review-bg px-2 py-0.5 text-[10px] font-bold uppercase">{t("feed.unverified")}</span>
+            </p>
+          )}
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-            <span className="rounded-md bg-surface-2 px-1.5 py-0.5 font-semibold text-text">{t(`election.${e.election}`)}</span>
+            {e.kind !== "incident" && <span className="rounded-md bg-surface-2 px-1.5 py-0.5 font-semibold text-text">{t(`election.${e.election}`)}</span>}
             <span className="truncate">{e.unit.code}{where ? ` · ${where}` : ""}</span>
             {e.kind === "photo" && <span className="font-mono">{shortHash(e.hash)}</span>}
             {e.kind === "photo" && <span className={e.read ? "text-ok-text" : ""}>{e.read ? t("feed.read") : t("review.reading")}</span>}
@@ -201,3 +251,11 @@ function Item({ e, now, fresh }: { e: FeedEvent; now: number; fresh: boolean }) 
     </li>
   );
 }
+
+const INCIDENT_LABELS: Record<Extract<FeedEvent, { kind: "incident" }>['incidentCode'], string> = {
+  VUB: "Vote buying",
+  VIO: "Violence",
+  MSB: "INEC staff misbehaviour",
+  BOG: "Ballot grabbing",
+  INT: "Intimidation",
+};
