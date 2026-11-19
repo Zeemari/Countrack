@@ -14,8 +14,10 @@ import { StatusBadge, WitnessMeter } from "@/components/StatusBadge";
 import { electionLinks, parseElection } from "@/lib/elections";
 import { formatTime, photoUrl } from "@/lib/format";
 import { t } from "@/lib/i18n";
+import { requestLang } from "@/lib/i18n/server";
 import { checkResult } from "@/lib/rules/checks";
 import { readingKey } from "@/lib/rules/consensus";
+import { recomputeUnit } from "@/lib/server/recompute";
 import { diffScores } from "@/lib/rules/diff";
 import { SolidarityPanel } from "@/components/solidarity/SafetyPanel";
 import { SOLIDARITY_ENABLED } from "@/lib/solidarity/config";
@@ -59,8 +61,13 @@ type UnitRow = {
 async function Unit({ params, searchParams }: Pick<PageProps<"/[lang]/units/[code]">, "params" | "searchParams">) {
   await connection();
   const { code } = await params;
+  const pageLang = await requestLang();
+  const translate = (key: Parameters<typeof t>[0], vars?: Record<string, string | number>) => t(key, vars, pageLang);
   const election = parseElection((await searchParams).election);
-  const { data: unit } = await publicClient()
+  const db = publicClient();
+  const { data: match } = await db.from("polling_units").select("id").eq("code", decodeURIComponent(code)).maybeSingle();
+  if (match) await recomputeUnit(match.id, election);
+  const { data: unit } = await db
     .from("polling_units")
     .select(
       `id, code, name, ward, lga, is_simulated,
@@ -76,7 +83,7 @@ async function Unit({ params, searchParams }: Pick<PageProps<"/[lang]/units/[cod
     .order("announced_at", { referencedTable: "collation_results", ascending: false })
     .maybeSingle<UnitRow>();
 
-  if (!unit) return <EmptyState icon={SearchX} title={t("unit.notFound")} />;
+  if (!unit) return <EmptyState icon={SearchX} title={translate("unit.notFound")} />;
 
   const result = many(unit.unit_results)[0];
   const status = result?.status ?? "pending";
@@ -95,7 +102,7 @@ async function Unit({ params, searchParams }: Pick<PageProps<"/[lang]/units/[cod
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md bg-surface-2 px-2 py-0.5 font-mono text-xs font-medium text-muted">{unit.code}</span>
             {unit.is_simulated && (
-              <span className="rounded-md bg-sim-bg px-2 py-0.5 text-[10px] font-bold tracking-wide text-sim-text">{t("common.simulated")}</span>
+              <span className="rounded-md bg-sim-bg px-2 py-0.5 text-[10px] font-bold tracking-wide text-sim-text">{translate("common.simulated")}</span>
             )}
           </div>
           <StatusBadge status={status} />
@@ -108,7 +115,7 @@ async function Unit({ params, searchParams }: Pick<PageProps<"/[lang]/units/[cod
         </div>
         <div className="border-t border-border pt-4">
           {status === "flagged" ? (
-            <p className="text-sm text-review-text">{t("status.flagged.detail")}</p>
+            <p className="text-sm text-review-text">{translate("status.flagged.detail")}</p>
           ) : (
             <WitnessMeter count={witnesses} status={status} />
           )}
@@ -118,7 +125,7 @@ async function Unit({ params, searchParams }: Pick<PageProps<"/[lang]/units/[cod
       <ElectionTabs value={election} links={electionLinks((e) => `/units/${encodeURIComponent(unit.code)}?election=${e}`)} />
 
       <Link href={`/capture?unit=${encodeURIComponent(unit.code)}&election=${election}`} className="btn btn-primary min-h-14 text-base">
-        <Camera aria-hidden className="size-5" /> {t("unit.addPhoto")}
+        <Camera aria-hidden className="size-5" /> {translate("unit.addPhoto")}
       </Link>
       </div>
 
@@ -126,36 +133,36 @@ async function Unit({ params, searchParams }: Pick<PageProps<"/[lang]/units/[cod
 
       {SOLIDARITY_ENABLED && <SolidarityPanel unitId={unit.id} code={unit.code} />}
 
-      <Card title={t("unit.wallResult")} icon={ShieldCheck}>
+      <Card title={translate("unit.wallResult")} icon={ShieldCheck}>
         {agreed ? (
           <>
             <FiguresTable result={agreed} />
             <FlagList flags={checkResult(agreed)} />
             {result?.verified_at && (
-              <p className="text-xs text-muted">{t("unit.verifiedAt", { time: formatTime(result.verified_at) })}</p>
+              <p className="text-xs text-muted">{translate("unit.verifiedAt", { time: formatTime(result.verified_at) })}</p>
             )}
           </>
         ) : (
-          <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">{status === "flagged" ? t("unit.flaggedHint") : t("unit.pendingHint")}</p>
+          <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">{status === "flagged" ? translate("unit.flaggedHint") : translate("unit.pendingHint")}</p>
         )}
       </Card>
 
-      <Card title={t("unit.compare")} icon={Scale}>
-        {unit.collation_results.length === 0 && <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">{t("unit.noCollation")}</p>}
-        {unit.collation_results.length > 0 && !agreed && <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">{t("unit.waitingForWall")}</p>}
+      <Card title={translate("unit.compare")} icon={Scale}>
+        {unit.collation_results.length === 0 && <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">{translate("unit.noCollation")}</p>}
+        {unit.collation_results.length > 0 && !agreed && <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">{translate("unit.waitingForWall")}</p>}
         {agreed &&
           unit.collation_results.map((c) => (
             <DiffTable
               key={c.id}
               diffs={diffScores(agreed.party_scores, PartyScores.parse(c.party_scores))}
-              source={`${c.source} · ${t(`level.${c.level}` as "level.ward")}`}
+              source={`${c.source} · ${translate(`level.${c.level}` as "level.ward")}`}
               announcedAt={formatTime(c.announced_at)}
               wallAccredited={agreed.accredited}
             />
           ))}
       </Card>
 
-      <Card title={t("unit.photos", { n: unit.result_photos.length })} icon={Images}>
+      <Card title={translate("unit.photos", { n: unit.result_photos.length })} icon={Images}>
         <ul className="grid gap-2 md:grid-cols-2">
           {unit.result_photos.map((p) => {
             const reading = p.extracted_results ? ExtractedResult.parse(p.extracted_results) : null;
@@ -167,12 +174,12 @@ async function Unit({ params, searchParams }: Pick<PageProps<"/[lang]/units/[cod
                   <img src={photoUrl(p.image_url)} alt="" loading="lazy" className="size-20 shrink-0 rounded-xl border border-border object-cover" />
                   <div className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
                     <span className="flex flex-wrap items-center gap-2 font-semibold">
-                      {t("unit.witness", { n: witnessNo.get(p.user_id) ?? 0 })}
-                      {matches === true && <span className="rounded-full bg-ok-bg px-2 py-0.5 text-xs font-medium text-ok-text">{t("unit.readingMatches")}</span>}
-                      {matches === false && <span className="rounded-full bg-review-bg px-2 py-0.5 text-xs font-medium text-review-text">{t("unit.readingDiffers")}</span>}
-                      {!reading && <span className="text-xs font-normal text-muted">{t("review.reading")}</span>}
+                      {translate("unit.witness", { n: witnessNo.get(p.user_id) ?? 0 })}
+                      {matches === true && <span className="rounded-full bg-ok-bg px-2 py-0.5 text-xs font-medium text-ok-text">{translate("unit.readingMatches")}</span>}
+                      {matches === false && <span className="rounded-full bg-review-bg px-2 py-0.5 text-xs font-medium text-review-text">{translate("unit.readingDiffers")}</span>}
+                      {!reading && <span className="text-xs font-normal text-muted">{translate("review.reading")}</span>}
                     </span>
-                    <span className="text-xs text-muted">{t("time.captured")}: {formatTime(p.captured_at)}</span>
+                    <span className="text-xs text-muted">{translate("time.captured")}: {formatTime(p.captured_at)}</span>
                     <HashChip hash={p.sha256_hash} verified={p.hash_verified} />
                   </div>
                   <ChevronRight aria-hidden className="size-4 self-center text-muted" />

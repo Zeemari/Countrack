@@ -5,7 +5,8 @@ import { INCIDENTS } from "@/lib/sms/incidents";
 export async function GET() {
   const { data, error } = await adminClient()
     .from("sms_incident_reports")
-    .select("id, incident_code, source, status, received_at, polling_units(code, name, ward, lga, state)")
+    .select("id, incident_code, source, received_at, polling_units(code, name, ward, lga, state)")
+    .neq("status", "dismissed")
     .order("received_at", { ascending: false })
     .limit(100);
 

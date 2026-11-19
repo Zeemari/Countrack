@@ -1,14 +1,18 @@
 import "server-only";
 import type { Election } from "../elections";
-import { computeConsensus, readingKey } from "../rules/consensus";
+import { computeConsensus, readingKey, SOLO_EC8_WAIT_MS } from "../rules/consensus";
 import { diffScores } from "../rules/diff";
-import { CheckFlags, ExtractedResult, PartyScores, type Reading } from "../schemas";
+import { CheckFlags, ExtractedResult, PartyScores, VisionExtraction, type Reading } from "../schemas";
 import { adminClient } from "../supabase/admin";
+import { LOW_CONFIDENCE_THRESHOLD } from "../rules/checks";
+import { unitCodeFlag } from "../vision/map";
 
 type PhotoRow = {
   user_id: string;
+  uploaded_at: string;
   hash_verified: boolean | null;
-  extracted_results: (ExtractedResult & { check_flags: unknown }) | (ExtractedResult & { check_flags: unknown })[] | null;
+  polling_units: { code: string } | { code: string }[] | null;
+  extracted_results: (ExtractedResult & { check_flags: unknown; ai_confidence: number | null; raw: unknown }) | (ExtractedResult & { check_flags: unknown; ai_confidence: number | null; raw: unknown })[] | null;
 };
 
 const one = <T,>(x: T | T[] | null): T | null => (Array.isArray(x) ? (x[0] ?? null) : x);
@@ -18,7 +22,7 @@ export async function recomputeUnit(unitId: string, election: Election) {
   const admin = adminClient();
   const { data, error } = await admin
     .from("result_photos")
-    .select("user_id, hash_verified, extracted_results(registered, accredited, rejected, total_valid, votes_cast, party_scores, check_flags)")
+    .select("user_id, uploaded_at, hash_verified, polling_units(code), extracted_results(registered, accredited, rejected, total_valid, votes_cast, party_scores, check_flags, ai_confidence, raw)")
     .eq("unit_id", unitId)
     .eq("election", election)
     .order("uploaded_at")
@@ -30,7 +34,21 @@ export async function recomputeUnit(unitId: string, election: Election) {
     // Photos whose server re-hash didn't match are never counted.
     if (!x || row.hash_verified === false) return [];
     const { check_flags, ...rest } = x;
-    return [{ userId: row.user_id, result: ExtractedResult.parse(rest), flags: CheckFlags.parse(check_flags) }];
+    const storedFlags = CheckFlags.parse(check_flags);
+    const vision = VisionExtraction.safeParse(x.raw).data;
+    const unit = one(row.polling_units);
+    const codeFlag = vision && unit ? unitCodeFlag(vision, unit.code) : null;
+    const flags = storedFlags.filter((flag) => flag.code !== "UNIT_CODE_MISMATCH" && flag.code !== "UNIT_CODE_UNREADABLE");
+    if (codeFlag) flags.push(codeFlag);
+    const clearEc8 = row.hash_verified === true
+      && !!vision
+      && vision.is_result_sheet
+      && vision.form_type === "EC8A"
+      && vision.legible
+      && (x.ai_confidence ?? 0) >= LOW_CONFIDENCE_THRESHOLD
+      && !codeFlag
+      && !flags.some((flag) => flag.severity === "blocking" || ["LOW_CONFIDENCE", "UNIT_CODE_MISMATCH", "WORDS_DIGITS_CONFLICT"].includes(flag.code));
+    return [{ userId: row.user_id, result: ExtractedResult.parse(rest), flags, submittedAt: row.uploaded_at, clearEc8 }];
   });
 
   const c = computeConsensus(readings);
@@ -60,6 +78,35 @@ export async function recomputeUnit(unitId: string, election: Election) {
 
   await recomputeDiscrepancies(unitId, election, c.status === "verified" ? c.agreed : null);
   return c;
+}
+
+let lastMaturitySweep = 0;
+/**
+ * Lazily advance eligible reports whose five-hour window has elapsed. The live feed
+ * polls this route, so a deployed demo updates without requiring a separate worker.
+ * The sweep is throttled per server instance and bounded to the latest 500 uploads.
+ */
+export async function recomputeMaturedUnits() {
+  const now = Date.now();
+  if (now - lastMaturitySweep < 60_000) return;
+  lastMaturitySweep = now;
+  const admin = adminClient();
+  const { data, error } = await admin.from("result_photos")
+    .select("unit_id, election, uploaded_at, extracted_results!inner(id)")
+    .eq("hash_verified", true)
+    .lt("uploaded_at", new Date(now - SOLO_EC8_WAIT_MS).toISOString())
+    .order("uploaded_at", { ascending: false })
+    .limit(500);
+  if (error) {
+    lastMaturitySweep = 0;
+    throw new Error(error.message);
+  }
+  const targets = new Map<string, Election>();
+  for (const row of data ?? []) targets.set(`${row.unit_id}:${row.election}`, row.election as Election);
+  for (const key of [...targets.keys()].slice(0, 50)) {
+    const unitId = key.slice(0, key.lastIndexOf(":"));
+    await recomputeUnit(unitId, targets.get(key)!);
+  }
 }
 
 /**

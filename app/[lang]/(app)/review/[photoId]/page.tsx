@@ -13,6 +13,7 @@ import { StatusBadge, WitnessMeter } from "@/components/StatusBadge";
 import { parseElection } from "@/lib/elections";
 import { formatTime, photoUrl } from "@/lib/format";
 import { t } from "@/lib/i18n";
+import { requestLang } from "@/lib/i18n/server";
 import { CheckFlags, type UnitStatus } from "@/lib/schemas";
 import { publicClient } from "@/lib/supabase/server";
 
@@ -44,6 +45,8 @@ type PhotoRow = {
 async function Review({ params }: Pick<PageProps<"/[lang]/review/[photoId]">, "params">) {
   await connection();
   const { photoId } = await params;
+  const pageLang = await requestLang();
+  const translate = (key: Parameters<typeof t>[0], vars?: Record<string, string | number>) => t(key, vars, pageLang);
   const db = publicClient();
   const { data: photo } = await db
     .from("result_photos")
@@ -53,7 +56,7 @@ async function Review({ params }: Pick<PageProps<"/[lang]/review/[photoId]">, "p
     .eq("id", photoId)
     .maybeSingle<PhotoRow>();
 
-  if (!photo) return <EmptyState icon={SearchX} title={t("review.notFound")} />;
+  if (!photo) return <EmptyState icon={SearchX} title={translate("review.notFound")} />;
   const election = parseElection(photo.election);
   const { data: unitResult } = await db
     .from("unit_results")
@@ -69,14 +72,14 @@ async function Review({ params }: Pick<PageProps<"/[lang]/review/[photoId]">, "p
   return (
     <>
       <header className="flex flex-col gap-1.5 animate-rise">
-        <span className="eyebrow">{unit.code} · {t(`election.${election}`)}</span>
-        <h1 className="display text-4xl text-balance md:text-6xl">{t("review.title")}</h1>
+        <span className="eyebrow">{unit.code} · {translate(`election.${election}` as Parameters<typeof t>[0])}</span>
+        <h1 className="display text-4xl text-balance md:text-6xl">{translate("review.title")}</h1>
       </header>
 
       <Link href={`/units/${unit.code}?election=${election}`} className="card pressable flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-3">
           <span className="min-w-0">
-            <span className="eyebrow block">{t("review.unitStatus")}</span>
+          <span className="eyebrow block">{translate("review.unitStatus")}</span>
             <span className="block truncate font-semibold">{unit.name}</span>
           </span>
           <StatusBadge status={status} size="sm" />
@@ -84,7 +87,7 @@ async function Review({ params }: Pick<PageProps<"/[lang]/review/[photoId]">, "p
         <div className="flex items-center justify-between">
           <WitnessMeter count={unitResult?.witness_count ?? 0} status={status} />
           <span className="inline-flex items-center gap-1 text-sm font-semibold text-brand">
-            {t("review.viewUnit")} <ArrowRight aria-hidden className="size-4" />
+            {translate("review.viewUnit")} <ArrowRight aria-hidden className="size-4" />
           </span>
         </div>
       </Link>
@@ -93,36 +96,36 @@ async function Review({ params }: Pick<PageProps<"/[lang]/review/[photoId]">, "p
       <div className="flex flex-col gap-5">
       {x ? (
         <>
-          <Card title={t("review.numbers")} icon={ScanText}>
+          <Card title={translate("review.numbers")} icon={ScanText}>
             <SheetReading raw={x.raw} fallback={x} unit={unit} />
             <p className="text-xs text-muted">
-              {t("review.readBy", { model: String(x?.model), confidence: Math.round(Number(x?.ai_confidence ?? 0) * 100) })}
+              {translate("review.readBy", { model: String(x?.model), confidence: Math.round(Number(x?.ai_confidence ?? 0) * 100) })}
             </p>
           </Card>
-          <Card title={t("review.checks")} icon={ListChecks}>
+          <Card title={translate("review.checks")} icon={ListChecks}>
             <FlagList flags={flags} />
             {flags.some((f) => f.severity === "blocking") && <ReadAgainButton photoId={photo.id} />}
           </Card>
         </>
       ) : (
-        <Card title={t("review.numbers")} icon={ScanText}>
+        <Card title={translate("review.numbers")} icon={ScanText}>
           <p className="flex items-center gap-2 rounded-xl bg-surface-2 p-4 text-sm text-muted">
             {photo.sync_status !== "failed" && <LoaderCircle aria-hidden className="size-4 animate-spin" />}
-            {photo.sync_status === "failed" ? t("review.failed") : t("review.reading")}
+            {photo.sync_status === "failed" ? translate("review.failed") : translate("review.reading")}
           </p>
         </Card>
       )}
 
       </div>
       <div>
-      <Card title={t("review.evidence")} icon={Fingerprint}>
+      <Card title={translate("review.evidence")} icon={Fingerprint}>
         {/* eslint-disable-next-line @next/next/no-img-element -- public storage URL, already compressed */}
-        <img src={photoUrl(photo.image_url)} alt={t("review.photoAlt")} loading="lazy" className="w-full rounded-xl border border-border" />
+        <img src={photoUrl(photo.image_url)} alt={translate("review.photoAlt")} loading="lazy" className="w-full rounded-xl border border-border" />
         <HashChip hash={photo.sha256_hash} verified={photo.hash_verified} full />
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-xl bg-surface-2 px-4 py-3 text-sm">
-          <dt className="text-muted">{t("time.captured")}</dt>
+          <dt className="text-muted">{translate("time.captured")}</dt>
           <dd className="text-right font-medium">{formatTime(photo.captured_at)}</dd>
-          <dt className="text-muted">{t("time.received")}</dt>
+          <dt className="text-muted">{translate("time.received")}</dt>
           <dd className="text-right font-medium">{formatTime(photo.uploaded_at)}</dd>
         </dl>
       </Card>

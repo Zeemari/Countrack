@@ -1,4 +1,4 @@
--- SMS incident reports are raw, unverified reports. Reporter identifiers are
+-- SMS incident reports are public reports. Reporter identifiers are
 -- HMAC fingerprints only; raw phone numbers are never persisted.
 create table if not exists public.sms_incident_reports (
   id uuid primary key default gen_random_uuid(),

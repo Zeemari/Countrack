@@ -254,7 +254,7 @@ function Item({ e, now, fresh, onHide }: { e: FeedEvent; now: number; fresh: boo
               <span className="ml-2 rounded-full bg-sim-bg px-2 py-0.5 text-[10px] font-bold uppercase text-sim-text">
                 {t(e.source === "demo" ? "feed.simulated" : e.source === "at_sandbox" ? "feed.sandbox" : "feed.testData")}
               </span>
-              <span className="ml-2 rounded-full bg-review-bg px-2 py-0.5 text-[10px] font-bold uppercase">{t("feed.unverified")}</span>
+              <span className="ml-2 rounded-full bg-review-bg px-2 py-0.5 text-[10px] font-bold uppercase">{t("feed.publicReport")}</span>
             </p>
           )}
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">

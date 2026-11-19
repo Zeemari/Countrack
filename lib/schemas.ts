@@ -72,6 +72,7 @@ export const CheckCode = z.enum([
   "NOT_A_RESULT_SHEET",
   "SHEET_ILLEGIBLE", // too blurry, cropped or dark to read
   "UNIT_CODE_MISMATCH", // the PU code written on the sheet is not the unit the witness chose
+  "UNIT_CODE_UNREADABLE", // the scanned sheet code could not be confirmed against the chosen unit
 ]);
 export type CheckCode = z.infer<typeof CheckCode>;
 
@@ -101,7 +102,15 @@ export type CheckMeta = {
 
 // ── Consensus ──────────────────────────────────────────────────────────
 export type UnitStatus = "pending" | "verified" | "flagged";
-export type Reading = { userId: string; result: ExtractedResult; flags: CheckFlag[] };
+export type Reading = {
+  userId: string;
+  result: ExtractedResult;
+  flags: CheckFlag[];
+  /** Trusted server upload time, never the device's capture clock. */
+  submittedAt?: string;
+  /** True only when the server confirms a legible EC8A with reliable extraction. */
+  clearEc8?: boolean;
+};
 export type Consensus = {
   status: UnitStatus;
   agreed: ExtractedResult | null;

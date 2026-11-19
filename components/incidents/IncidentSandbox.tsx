@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, MessageSquareWarning, RefreshCw, Send, ShieldCheck } from "lucide-react";
+import { AlertTriangle, MessageSquareWarning, Radio, RefreshCw, Send } from "lucide-react";
 import { HeroPanel, HeroTray } from "@/components/HeroPanel";
 import { t } from "@/lib/i18n";
 
@@ -10,7 +10,6 @@ type Report = {
   incident_code: string;
   incident_label: string;
   source: "demo" | "at_sandbox";
-  status: string;
   received_at: string;
   polling_units: { code: string; name: string; ward: string; lga: string; state: string } | null;
 };
@@ -165,10 +164,10 @@ export function IncidentSandbox() {
                     <time className="text-xs text-muted">{new Date(report.received_at).toLocaleTimeString()}</time>
                   </p>
                   <p className="truncate font-mono text-sm">{report.polling_units?.code ?? "Unknown unit"}</p>
-                  <p className="truncate text-xs text-muted">{[report.polling_units?.name, report.polling_units?.ward, report.polling_units?.lga, report.polling_units?.state].filter(Boolean).join(" · ")}</p>
+                  <p className="truncate text-xs text-muted">{[report.polling_units?.name, report.polling_units?.ward, report.polling_units?.lga, report.polling_units?.state].filter(Boolean).join(" / ")}</p>
                   <span className="mt-1 flex flex-wrap gap-2 text-xs">
                     <span className="rounded-full bg-sim-bg px-2.5 py-1 font-bold text-sim-text">{report.source === "demo" ? "SIMULATED" : "AT SANDBOX"}</span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-pending-bg px-2.5 py-1 text-pending-text"><ShieldCheck aria-hidden className="size-3.5" />{report.status}</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-review-bg px-2.5 py-1 font-bold text-review-text"><Radio aria-hidden className="size-3.5" />Public report</span>
                   </span>
                 </div>
               </li>
