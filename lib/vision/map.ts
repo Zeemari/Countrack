@@ -67,13 +67,12 @@ export function fromVision(v: VisionExtraction): { result: ExtractedResult; meta
   };
 }
 
-/**
- * Warns when the polling unit code written on the sheet is a different unit from the one the
- * witness chose (a likely mix-up). Silent when the sheet has no readable code.
- */
+/** A result sheet must have a readable PU code that matches the witness's selected unit. */
 export function unitCodeFlag(v: VisionExtraction, chosenCode: string): CheckFlag | null {
-  if (!v.is_result_sheet || !v.unit.polling_unit_code) return null;
-  const onSheet = normalizePuCode(v.unit.polling_unit_code);
-  const chosen = normalizePuCode(chosenCode) ?? chosenCode;
-  return onSheet && onSheet !== chosen ? { code: "UNIT_CODE_MISMATCH", severity: "warning", field: onSheet } : null;
+  if (!v.is_result_sheet) return null;
+  const rawOnSheet = v.unit.polling_unit_code?.trim();
+  const onSheet = rawOnSheet ? normalizePuCode(rawOnSheet) : null;
+  const chosen = normalizePuCode(chosenCode);
+  if (!onSheet || !chosen) return { code: "UNIT_CODE_UNREADABLE", severity: "blocking", field: rawOnSheet || undefined };
+  return onSheet !== chosen ? { code: "UNIT_CODE_MISMATCH", severity: "blocking", field: onSheet } : null;
 }

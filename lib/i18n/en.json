@@ -323,6 +323,7 @@
   "flag.blocking": "Can't be counted yet",
   "flag.warning": "Worth a closer look",
   "flag.UNIT_CODE_MISMATCH": "The polling unit code on the sheet ({code}) is not the unit you chose. Check you picked the right polling unit.",
+  "flag.UNIT_CODE_UNREADABLE": "We couldn't confirm the polling unit code on this sheet. Retake it with the code clearly visible.",
   "field.party": "{party}'s score",
   "field.party_scores": "the party scores",
   "field.sheet": "the sheet",

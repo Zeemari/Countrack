@@ -72,6 +72,7 @@ export const CheckCode = z.enum([
   "NOT_A_RESULT_SHEET",
   "SHEET_ILLEGIBLE", // too blurry, cropped or dark to read
   "UNIT_CODE_MISMATCH", // the PU code written on the sheet is not the unit the witness chose
+  "UNIT_CODE_UNREADABLE", // the scanned sheet code could not be confirmed against the chosen unit
 ]);
 export type CheckCode = z.infer<typeof CheckCode>;
 

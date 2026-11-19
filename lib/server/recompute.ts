@@ -5,6 +5,7 @@ import { diffScores } from "../rules/diff";
 import { CheckFlags, ExtractedResult, PartyScores, VisionExtraction, type Reading } from "../schemas";
 import { adminClient } from "../supabase/admin";
 import { LOW_CONFIDENCE_THRESHOLD } from "../rules/checks";
+import { unitCodeFlag } from "../vision/map";
 
 type PhotoRow = {
   user_id: string;
@@ -33,18 +34,19 @@ export async function recomputeUnit(unitId: string, election: Election) {
     // Photos whose server re-hash didn't match are never counted.
     if (!x || row.hash_verified === false) return [];
     const { check_flags, ...rest } = x;
-    const flags = CheckFlags.parse(check_flags);
+    const storedFlags = CheckFlags.parse(check_flags);
     const vision = VisionExtraction.safeParse(x.raw).data;
     const unit = one(row.polling_units);
-    const extractedUnitCode = vision?.unit.polling_unit_code?.trim();
-    const codeMatches = !extractedUnitCode || !unit || extractedUnitCode.replace(/\s/g, "").toLowerCase() === unit.code.replace(/\s/g, "").toLowerCase();
+    const codeFlag = vision && unit ? unitCodeFlag(vision, unit.code) : null;
+    const flags = storedFlags.filter((flag) => flag.code !== "UNIT_CODE_MISMATCH" && flag.code !== "UNIT_CODE_UNREADABLE");
+    if (codeFlag) flags.push(codeFlag);
     const clearEc8 = row.hash_verified === true
       && !!vision
       && vision.is_result_sheet
       && vision.form_type === "EC8A"
       && vision.legible
       && (x.ai_confidence ?? 0) >= LOW_CONFIDENCE_THRESHOLD
-      && codeMatches
+      && !codeFlag
       && !flags.some((flag) => flag.severity === "blocking" || ["LOW_CONFIDENCE", "UNIT_CODE_MISMATCH", "WORDS_DIGITS_CONFLICT"].includes(flag.code));
     return [{ userId: row.user_id, result: ExtractedResult.parse(rest), flags, submittedAt: row.uploaded_at, clearEc8 }];
   });

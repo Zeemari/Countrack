@@ -16,7 +16,7 @@ import type { JpegPhoto } from "@/lib/image";
 import { t } from "@/lib/i18n";
 import { useCaptures, useOnline } from "@/lib/offline/hooks";
 import { enqueue, updateCapture } from "@/lib/offline/queue";
-import { syncAll } from "@/lib/offline/sync";
+import { MAX_ATTEMPTS, syncAll } from "@/lib/offline/sync";
 
 const noop = () => () => {};
 /** False on a plain-http link (e.g. a laptop's Wi-Fi IP), where phones disable offline use. */
@@ -167,7 +167,7 @@ export function CaptureForm({ election, onBusyChange }: { election: Election; on
           error={current?.status === "failed" ? (current.error ?? t("queue.failed")) : null}
           onClose={closeResult}
           onRetake={() => setCameraOpen(true)}
-          onRetry={retry}
+          onRetry={current && current.attempts < MAX_ATTEMPTS ? retry : undefined}
         />
       )}
 

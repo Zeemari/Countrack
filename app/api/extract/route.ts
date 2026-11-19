@@ -3,7 +3,7 @@ import { sha256Hex } from "@/lib/hash";
 import { checkResult } from "@/lib/rules/checks";
 import { parseElection } from "@/lib/elections";
 import { isNetworkError, RETAKE_STATUS, RETRYABLE_STATUS } from "@/lib/network";
-import { ExtractRequest } from "@/lib/schemas";
+import { CheckFlags, ExtractRequest, VisionExtraction } from "@/lib/schemas";
 import { recomputeUnit } from "@/lib/server/recompute";
 import { adminClient } from "@/lib/supabase/admin";
 import { userClient } from "@/lib/supabase/server";
@@ -35,13 +35,29 @@ export async function POST(req: Request) {
 
   // Idempotent: a retry after a dropped response just returns the existing reading.
   // "Read again" (same phone only) replaces it, e.g. after the reader misjudged the sheet.
-  const { data: existing } = await admin.from("extracted_results").select("id").eq("photo_id", photo.id).maybeSingle();
+  const { data: existing } = await admin.from("extracted_results").select("id, raw, check_flags").eq("photo_id", photo.id).maybeSingle();
   if (existing && body.data.reread) {
     const del = await admin.from("extracted_results").delete().eq("id", existing.id);
     if (del.error) return fail("Couldn't start a new reading. Please try again.", 500);
   } else if (existing) {
-    const unit = await recomputeUnit(photo.unit_id, election);
-    return NextResponse.json({ ok: true, photoId: photo.id, unitStatus: unit.status });
+    const unit = photo.polling_units as { code: string } | { code: string }[] | null;
+    const chosenCode = (Array.isArray(unit) ? unit[0] : unit)?.code;
+    const vision = VisionExtraction.safeParse(existing.raw);
+    const codeFlag = vision.success
+      ? unitCodeFlag(vision.data, chosenCode ?? "")
+      : { code: "UNIT_CODE_UNREADABLE" as const, severity: "blocking" as const };
+    if (codeFlag) {
+      const storedFlags = CheckFlags.safeParse(existing.check_flags).data ?? [];
+      const flags = [...storedFlags.filter((flag) => flag.code !== codeFlag.code), codeFlag];
+      const { error: flagError } = await admin.from("extracted_results").update({ check_flags: flags }).eq("id", existing.id);
+      if (flagError) console.error("could not mark mismatched existing reading", flagError.message);
+      const { error: statusError } = await admin.from("result_photos").update({ sync_status: "failed" }).eq("id", photo.id);
+      if (statusError) console.error("could not reject mismatched photo", statusError.message);
+      await recomputeUnit(photo.unit_id, election).catch((error) => console.error("could not refresh unit after rejecting reading", error));
+      return fail(unitCodeError(codeFlag.code, codeFlag.field, chosenCode), RETAKE_STATUS);
+    }
+    const unitStatus = await recomputeUnit(photo.unit_id, election);
+    return NextResponse.json({ ok: true, photoId: photo.id, unitStatus: unitStatus.status });
   }
 
   await admin.from("result_photos").update({ sync_status: "extracting" }).eq("id", photo.id);
@@ -64,8 +80,13 @@ export async function POST(req: Request) {
     const flags = checkResult(result, meta);
     const unit = photo.polling_units as { code: string } | { code: string }[] | null;
     const chosenCode = (Array.isArray(unit) ? unit[0] : unit)?.code;
-    const mismatch = chosenCode ? unitCodeFlag(vision, chosenCode) : null;
-    if (mismatch) flags.push(mismatch);
+    const codeFlag = unitCodeFlag(vision, chosenCode ?? "");
+    if (codeFlag) {
+      const { error: statusError } = await admin.from("result_photos").update({ sync_status: "failed" }).eq("id", photo.id);
+      if (statusError) console.error("could not reject mismatched photo", statusError.message);
+      await recomputeUnit(photo.unit_id, election).catch((error) => console.error("could not refresh unit after rejecting reading", error));
+      return fail(unitCodeError(codeFlag.code, codeFlag.field, chosenCode), RETAKE_STATUS);
+    }
 
     const ins = await admin.from("extracted_results").insert({
       photo_id: photo.id,
@@ -88,4 +109,11 @@ export async function POST(req: Request) {
     if (isNetworkError(e)) return fail("Couldn't reach the reading service. Trying again shortly.", RETRYABLE_STATUS);
     return fail("Couldn't read this photo right now. It will retry.", 502);
   }
+}
+
+function unitCodeError(code: string, scannedCode?: string, selectedCode?: string) {
+  if (code === "UNIT_CODE_MISMATCH") {
+    return `This sheet shows polling unit ${scannedCode}, but you selected ${selectedCode}. This report was not accepted. Select the unit printed on the sheet and take the photo again.`;
+  }
+  return `CounTrack couldn't read the polling-unit code on this sheet, so it couldn't confirm the selected unit${selectedCode ? ` (${selectedCode})` : ""}. Retake the photo with the code clearly visible.`;
 }
