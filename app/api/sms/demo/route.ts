@@ -1,0 +1,62 @@
+import { createHmac } from "node:crypto";
+import { NextResponse } from "next/server";
+import { adminClient } from "@/lib/supabase/admin";
+import { INCIDENTS, helpReply, parseIncidentMessage } from "@/lib/sms/incidents";
+
+export async function POST(request: Request) {
+  let body: { from?: string; text?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Expected JSON" }, { status: 400 });
+  }
+  const from = String(body.from ?? "").trim();
+  const text = String(body.text ?? "").trim();
+  if (!/^\+?[\d ()-]{7,24}$/.test(from) || !text || text.length > 500) {
+    return NextResponse.json({ error: "Enter a phone number and a message up to 500 characters" }, { status: 400 });
+  }
+
+  const parsed = parseIncidentMessage(text);
+  if (!parsed) return NextResponse.json({ ok: true, accepted: false, reply: helpReply() });
+
+  const db = adminClient();
+  const { data: unit, error: unitError } = await db
+    .from("polling_units")
+    .select("id, code")
+    .eq("code", parsed.unitCode)
+    .eq("is_simulated", false)
+    .eq("directory_is_current", true)
+    .maybeSingle();
+  if (unitError) {
+    console.error("Demo incident PU lookup failed", unitError.message);
+    return NextResponse.json({ error: "Polling unit lookup unavailable" }, { status: 503 });
+  }
+  if (!unit) return NextResponse.json({ ok: true, accepted: false, reply: `Polling unit ${parsed.unitCode} was not found. Check the code and try again.` });
+
+  const secret = process.env.SMS_SENDER_HASH_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const senderFingerprint = secret ? createHmac("sha256", secret).update(from).digest("hex") : null;
+  if (senderFingerprint) {
+    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count, error } = await db.from("incident_reports").select("id", { count: "exact", head: true })
+      .eq("sender_fingerprint", senderFingerprint).eq("source", "demo").gte("received_at", since);
+    if (error) return NextResponse.json({ error: "Rate limit check unavailable" }, { status: 503 });
+    if ((count ?? 0) >= 10) return NextResponse.json({ error: "Demo limit reached for this sender. Try again later." }, { status: 429 });
+  }
+
+  const { data: report, error: insertError } = await db.from("incident_reports").insert({
+    unit_id: unit.id,
+    incident_code: parsed.incidentCode,
+    source: "demo",
+    sender_fingerprint: senderFingerprint,
+  }).select("id").single();
+  if (insertError) {
+    console.error("Demo incident insert failed", insertError.message);
+    return NextResponse.json({ error: "Could not save incident report. Apply the incident_reports migration first." }, { status: 503 });
+  }
+  return NextResponse.json({
+    ok: true,
+    accepted: true,
+    reportId: report.id,
+    reply: `SIMULATED reply: report received for ${unit.code}: ${INCIDENTS[parsed.incidentCode]}. It is unreviewed, not confirmed.`,
+  });
+}
