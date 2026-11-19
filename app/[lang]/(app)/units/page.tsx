@@ -10,7 +10,7 @@ import { loadUnits } from "./query";
 import { parseUnitsQuery } from "./shared";
 import { UnitBrowser } from "./UnitBrowser";
 
-export default function UnitsPage({ searchParams }: PageProps<"/units">) {
+export default function UnitsPage({ searchParams }: PageProps<"/[lang]/units">) {
   return (
     <>
       <WidePage />
@@ -44,7 +44,7 @@ function ListSkeleton() {
   );
 }
 
-async function UnitList({ searchParams }: Pick<PageProps<"/units">, "searchParams">) {
+async function UnitList({ searchParams }: Pick<PageProps<"/[lang]/units">, "searchParams">) {
   await connection(); // always live: statuses change as witnesses submit
   const query = parseUnitsQuery(await searchParams);
   let data;

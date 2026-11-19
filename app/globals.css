@@ -35,6 +35,15 @@
   --pending-text: #4a514b;
   --sim-bg: #fde3a0;
   --sim-text: #5a3b00;
+  /* One solid colour per election type (chips, step dots). Always paired with dark ink. */
+  --e-pres: #ffd466;
+  --e-gov: #3ccf7c;
+  --e-sen: #f3c6dc;
+  --e-reps: #8fd0ff;
+  --e-assembly: #ffa77d;
+  --e-chair: #c8b8ff;
+  --e-council: #7fe3cf;
+  --e-ink: #0f150f;
   --shadow: 0 1px 2px rgb(15 21 15 / 0.05), 0 6px 18px -6px rgb(15 21 15 / 0.12);
   --shadow-lg: 0 2px 6px rgb(15 21 15 / 0.08), 0 24px 48px -16px rgb(12 36 24 / 0.45);
   color-scheme: light;
@@ -73,6 +82,19 @@
   }
 }
 
+/*
+ * Yorùbá and Igbo stack tone marks on dotted letters (ọ̀, ẹ́, ị̀). Google Fonts splits Geist and
+ * Bricolage into per-range files, so the mark and its letter land in different files and the
+ * accent comes loose. Apple's system-ui (SF) also misplaces them at body sizes. Roboto/Noto
+ * (Android), Helvetica Neue (Apple) and Arial/Segoe (Windows) position them correctly.
+ * Beats next/font's html class on specificity.
+ */
+html:lang(yo),
+html:lang(ig) {
+  --font-geist-sans: Roboto, "Noto Sans", "Helvetica Neue", Arial, "Segoe UI", sans-serif;
+  --font-bricolage: Roboto, "Noto Sans", "Helvetica Neue", Arial, "Segoe UI", sans-serif;
+}
+
 @theme inline {
   --color-frame: var(--frame);
   --color-frame-2: var(--frame-2);
@@ -99,6 +121,14 @@
   --color-pending-text: var(--pending-text);
   --color-sim-bg: var(--sim-bg);
   --color-sim-text: var(--sim-text);
+  --color-e-pres: var(--e-pres);
+  --color-e-gov: var(--e-gov);
+  --color-e-sen: var(--e-sen);
+  --color-e-reps: var(--e-reps);
+  --color-e-assembly: var(--e-assembly);
+  --color-e-chair: var(--e-chair);
+  --color-e-council: var(--e-council);
+  --color-e-ink: var(--e-ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-display: var(--font-bricolage);

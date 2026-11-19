@@ -51,6 +51,14 @@ To import real directory data:
 
 The importer resolves the selected GitHub ref to a commit, validates the source manifest, row count, full codes, and duplicates, then upserts in batches. It marks older imported snapshots inactive only after the new snapshot has fully imported. By default it uses the source repo's `main` branch; set `INEC_DATASET_REF` to a 40-character commit SHA for a repeatable import. The source is the community-maintained [`nigeria-inec-geo`](https://github.com/saidiadegoke/nigeria-inec-geo) snapshot of INEC's public CVR directory; check records against INEC before relying on them. This import contains names and administrative locations, not verified directions or coordinates.
 
+## Languages
+
+CounTrack speaks English, Naijá (Nigerian Pidgin), Hausa, Yorùbá and Igbo. Readers get their language from a `lang` cookie (set by the header's language menu), else from their browser's `Accept-Language`. URLs stay the same (`/units`), and `proxy.ts` rewrites them to the prerendered `app/[lang]/…` page. A prefixed link like `/ha/units` opens in that language and remembers it.
+
+`t()` works everywhere without a language argument: server components read the `[lang]` root param, and client components read it from context or `<html lang>`. Strings live in `lib/i18n/<code>.json`. Every non-English file overrides English key by key and falls back to English for anything missing. `tests/i18n.test.ts` fails if a catalog has an unknown key, drops a `{placeholder}`, or misses a user-facing string.
+
+To add a language (Fulfulde, Kanuri, Tiv, Ibibio, Ijaw, Nupe…): add it to `lib/i18n/langs.ts`, add `lib/i18n/<code>.json`, and register it in `lib/i18n/index.ts`. **Have native speakers review translations before an election**: the current Pidgin, Hausa, Yorùbá and Igbo text is a careful first draft, not a certified translation. Languages with stacked tone marks use the phone's font (see `html:lang(yo)` in `globals.css`), because the web fonts can't position them.
+
 ## Elections
 
 CounTrack tracks the seven election types INEC lists on IReV: presidential, governorship, senatorial, House of Representatives (`house_of_reps`), State House of Assembly (`state_assembly`), chairmanship and councillorship. Apply `supabase/migrations/20261119000300_all_elections.sql` in the SQL Editor **on its own** (new enum values must commit before they're used). It renames the old `local_government` value to `chairmanship`; old links and queued captures that say `local_government` are read as chairmanship.

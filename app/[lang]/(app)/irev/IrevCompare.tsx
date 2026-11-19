@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowUpRight, Camera, Download, ExternalLink, FileText, Imag
 import { DiffTable } from "@/components/DiffTable";
 import { StatusBadge, WitnessMeter } from "@/components/StatusBadge";
 import type { Election } from "@/lib/elections";
+import { ELECTION_STYLE } from "@/lib/election-style";
 import { formatTime } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import type { IrevUnit, IrevUnitResponse } from "@/lib/irev/types";
@@ -30,6 +31,7 @@ export function IrevCompare({ electionId, puId, election, unit: listed, onBack }
   const unit = listed ?? single.body?.data ?? null;
   const code = unit?.code ?? null;
   const ours = useFetch<Comparison>(code ? `/api/compare?${new URLSearchParams({ code, election })}` : null);
+  const style = ELECTION_STYLE[election];
 
   return (
     <div className="flex flex-col gap-4 animate-rise">
@@ -45,24 +47,26 @@ export function IrevCompare({ electionId, puId, election, unit: listed, onBack }
         )
       ) : (
         <>
-          <header className="flex flex-col gap-3 rounded-3xl border border-border bg-surface p-5 shadow-card sm:flex-row sm:items-start sm:justify-between">
+          <header className={`flex flex-col gap-3 rounded-3xl p-5 text-e-ink shadow-card sm:flex-row sm:items-center sm:justify-between md:p-6 ${style.bg}`}>
             <div className="min-w-0">
-              <p className="font-mono text-xs font-semibold text-muted">{unit.irevCode ?? "—"}</p>
-              <h2 className="mt-0.5 text-xl leading-snug font-bold text-balance">{unit.name}</h2>
-              <p className="mt-1 text-sm text-muted">
+              <p className="flex items-center gap-2 font-mono text-xs font-bold opacity-70">
+                <style.icon aria-hidden className="size-3.5" /> {t(`election.${election}`)} · {unit.irevCode ?? "—"}
+              </p>
+              <h2 className="display mt-1 text-3xl text-balance md:text-4xl">{unit.name}</h2>
+              <p className="mt-2 text-sm font-medium opacity-75">
                 {unit.uploadedAt ? t("irev.uploadedAt", { at: formatTime(unit.uploadedAt) }) : t("irev.notUploaded")}
-                {unit.isSupplement && <span className="ml-2 rounded-md bg-sim-bg px-1.5 py-0.5 text-[10px] font-bold text-sim-text uppercase">{t("irev.supplement")}</span>}
+                {unit.isSupplement && <span className="ml-2 rounded-md bg-e-ink px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">{t("irev.supplement")}</span>}
               </p>
             </div>
             {unit.documentUrl && (
               <div className="flex shrink-0 gap-2">
                 <a
                   href={`/api/irev/sheet?${new URLSearchParams({ electionId, pu: unit.id, download: "1" })}`}
-                  className="btn btn-secondary min-h-10 px-3.5 text-sm"
+                  className="btn min-h-10 bg-e-ink px-3.5 text-sm text-white hover:opacity-90"
                 >
                   <Download aria-hidden className="size-4" /> {t("irev.download")}
                 </a>
-                <a href={unit.documentUrl} target="_blank" rel="noreferrer noopener" className="btn btn-secondary min-h-10 px-3.5 text-sm">
+                <a href={unit.documentUrl} target="_blank" rel="noreferrer noopener" className="btn min-h-10 border-2 border-e-ink/80 px-3.5 text-sm hover:bg-e-ink/10">
                   <ExternalLink aria-hidden className="size-4" /> {t("irev.openOriginal")}
                 </a>
               </div>
@@ -72,19 +76,13 @@ export function IrevCompare({ electionId, puId, election, unit: listed, onBack }
           <div className="grid gap-4 xl:grid-cols-2">
             {/* IReV */}
             <section className="flex flex-col gap-3 rounded-3xl border border-border bg-surface p-4 shadow-card">
-              <h3 className="flex items-center justify-between gap-2 text-sm font-semibold">
-                <span className="flex items-center gap-2"><span className="size-2 rounded-full bg-accent" /> {t("irev.side.irev")}</span>
-                <span className="text-xs font-normal text-muted">{t("irev.side.irev.hint")}</span>
-              </h3>
+              <h3><span className="inline-flex items-center gap-2 rounded-full bg-text px-3 py-1 text-xs font-bold tracking-wide text-bg uppercase">INEC · IReV</span></h3>
               <Sheet unit={unit} />
             </section>
 
             {/* CounTrack */}
             <section className="flex flex-col gap-3 rounded-3xl border border-border bg-surface p-4 shadow-card">
-              <h3 className="flex items-center justify-between gap-2 text-sm font-semibold">
-                <span className="flex items-center gap-2"><span className="size-2 rounded-full bg-brand" /> {t("irev.side.ours")}</span>
-                <span className="text-xs font-normal text-muted">{t("irev.side.ours.hint")}</span>
-              </h3>
+              <h3><span className="inline-flex items-center gap-2 rounded-full bg-brand px-3 py-1 text-xs font-bold tracking-wide text-brand-ink uppercase">{t("irev.side.ours")}</span></h3>
               {!code ? (
                 <Note>{t("irev.ours.noCode")}</Note>
               ) : ours.loading ? (

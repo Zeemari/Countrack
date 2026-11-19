@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { HeaderNav } from "@/components/HeaderNav";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { LogoMark } from "@/components/Logo";
 import { t } from "@/lib/i18n";
 
@@ -17,6 +18,7 @@ export function AppHeader() {
         <Suspense>
           <HeaderNav />
         </Suspense>
+        <LanguageSwitcher />
       </div>
     </header>
   );
