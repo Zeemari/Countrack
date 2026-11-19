@@ -7,7 +7,7 @@ import { NAV } from "@/components/nav-items";
 import { t } from "@/lib/i18n";
 import { useCaptures } from "@/lib/offline/hooks";
 
-const LINKS = [NAV.units, NAV.irev, NAV.queue, NAV.collate];
+const LINKS = [NAV.units, NAV.irev, NAV.incidents, NAV.queue, NAV.collate];
 
 /** Plain text links for wider screens; phones use the bottom bar instead. */
 export function HeaderNav() {

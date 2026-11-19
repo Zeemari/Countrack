@@ -17,7 +17,7 @@ export function BottomNav() {
       aria-label={t("nav.main")}
       className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 rounded-full border border-frame-ink/10 bg-frame/90 text-frame-ink shadow-lift backdrop-blur-xl md:hidden"
     >
-      <ul className="mx-auto grid h-16 max-w-md grid-cols-5 items-center px-2">
+      <ul className="mx-auto grid h-16 max-w-lg grid-cols-6 items-center px-2">
         <Tab item={NAV.home} path={path} />
         <Tab item={NAV.units} path={path} />
         <li className="flex justify-center">
@@ -32,6 +32,7 @@ export function BottomNav() {
         </li>
         <Tab item={NAV.queue} path={path} badge={pending} />
         <Tab item={NAV.collate} path={path} />
+        <Tab item={NAV.incidents} path={path} />
       </ul>
     </nav>
   );
