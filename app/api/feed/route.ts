@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Election } from "@/lib/elections";
 import type { FeedEvent, FeedUnit } from "@/lib/feed";
+import { adminClient } from "@/lib/supabase/admin";
 import { publicClient } from "@/lib/supabase/server";
 
 const LIMIT = 15;
@@ -10,6 +11,7 @@ const one = <T,>(x: T | T[] | null): T | null => (Array.isArray(x) ? (x[0] ?? nu
 type PhotoRow = { id: string; uploaded_at: string; election: Election; image_url: string; sha256_hash: string; polling_units: FeedUnit | FeedUnit[] | null; extracted_results: { id: string } | { id: string }[] | null };
 type ResultRow = { id: string; updated_at: string; verified_at: string | null; status: "verified" | "flagged"; election: Election; witness_count: number; polling_units: FeedUnit | FeedUnit[] | null };
 type DiffRow = { id: string; detected_at: string; election: Election; party: string; wall_votes: number; announced_votes: number; polling_units: FeedUnit | FeedUnit[] | null };
+type IncidentFeedRow = { unit_id: string; incident_code: "VUB" | "VIO" | "MSB" | "BOG" | "INT"; report_count: number; demo_count: number; sandbox_count: number; latest_received_at: string; code: string; name: string; ward: string; lga: string; state: string };
 
 /** Latest public activity across all units: photos sealed, units verified or needing review, mismatches. */
 export async function GET(req: Request) {
@@ -27,10 +29,12 @@ export async function GET(req: Request) {
     diffsQ = diffsQ.eq("election", election);
   }
 
-  const [photos, results, diffs] = await Promise.all([
+  const [photos, results, diffs, incidents] = await Promise.all([
     photosQ.order("uploaded_at", { ascending: false }).limit(LIMIT).returns<PhotoRow[]>(),
     resultsQ.order("updated_at", { ascending: false }).limit(LIMIT).returns<ResultRow[]>(),
     diffsQ.order("detected_at", { ascending: false }).limit(LIMIT).returns<DiffRow[]>(),
+    // This SECURITY DEFINER RPC only returns grouped, non-identifying public counts.
+    adminClient().rpc("incident_feed").returns<IncidentFeedRow[]>(),
   ]);
   const failed = photos.error ?? results.error ?? diffs.error;
   if (failed) {
@@ -51,6 +55,28 @@ export async function GET(req: Request) {
     const unit = one(d.polling_units);
     if (unit) events.push({ kind: "mismatch", id: `d-${d.id}`, at: d.detected_at, election: d.election, unit, party: d.party, wall: d.wall_votes, announced: d.announced_votes });
   }
+  if (incidents.error) {
+    // Keep the result activity feed working if the incident aggregation migration is not applied yet.
+    console.error("incident feed unavailable", incidents.error.message);
+  } else {
+    for (const incident of incidents.data ?? []) {
+      events.push({
+        kind: "incident",
+        id: `i-${incident.unit_id}-${incident.incident_code}`,
+        at: incident.latest_received_at,
+        unit: { code: incident.code, name: incident.name, ward: incident.ward, lga: incident.lga, state: incident.state },
+        incidentCode: incident.incident_code,
+        reportCount: Number(incident.report_count),
+        source: Number(incident.demo_count) === Number(incident.report_count)
+          ? "demo"
+          : Number(incident.sandbox_count) === Number(incident.report_count) ? "at_sandbox" : "mixed",
+      });
+    }
+  }
   events.sort((a, b) => b.at.localeCompare(a.at));
-  return NextResponse.json({ events: events.slice(0, 30) }, { headers: { "Cache-Control": "no-store" } });
+  // Keep the newest general activity plus every grouped incident entry in the response,
+  // so the browser can retain the incident view for offline use.
+  const activity = events.filter((event) => event.kind !== "incident").slice(0, 30);
+  const incidentEvents = events.filter((event) => event.kind === "incident");
+  return NextResponse.json({ events: [...activity, ...incidentEvents].sort((a, b) => b.at.localeCompare(a.at)) }, { headers: { "Cache-Control": "no-store" } });
 }
