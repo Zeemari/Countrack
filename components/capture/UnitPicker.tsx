@@ -73,10 +73,12 @@ export function useUnitPicker(online: boolean, initialCode?: string | null) {
   };
 }
 
-export function UnitPickerFields({ picker: p, locked = false, showArea = true }: { picker: UnitPicker; locked?: boolean; showArea?: boolean }) {
+export function UnitPickerFields({
+  picker: p, locked = false, showArea = true, gridClassName = "grid grid-cols-2 gap-3",
+}: { picker: UnitPicker; locked?: boolean; showArea?: boolean; gridClassName?: string }) {
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
+      <div className={gridClassName}>
         <Select label={t("capture.state")} value={p.state} options={p.states.map((s) => [s, s])} disabled={locked || !p.loaded} onChange={p.chooseState} />
         <Select label={t("capture.lga")} value={p.lga} options={p.lgas.map((s) => [s, s])} disabled={locked || !p.state} onChange={p.chooseLga} />
         <Select label={t("capture.ward")} value={p.ward} options={p.wards.map((s) => [s, s])} disabled={locked || !p.lga} onChange={p.chooseWard} />

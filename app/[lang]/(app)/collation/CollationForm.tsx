@@ -2,37 +2,52 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronsUpDown, FileCheck2, ImageUp, Loader2, Plus, Send, TriangleAlert } from "lucide-react";
+import {
+  ArrowRight, Building2, Check, Clock, FileText, Globe, ImageUp, Loader2, MapPin, Megaphone, Plus, Scale, Send, TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
 import { UnitPickerFields, useUnitPicker } from "@/components/capture/UnitPicker";
-import { ElectionTabs } from "@/components/ElectionTabs";
+import { DoodlePattern } from "@/components/home/Sticker";
+import { HeroPanel, HeroTray } from "@/components/HeroPanel";
 import { normalizePuCode } from "@/lib/directory";
-import { DEFAULT_ELECTION, type Election } from "@/lib/elections";
+import { ELECTION_STYLE } from "@/lib/election-style";
+import { DEFAULT_ELECTION, ELECTIONS, type Election } from "@/lib/elections";
+import { signed } from "@/lib/format";
 import { t, type MessageKey } from "@/lib/i18n";
 import { fileToJpeg } from "@/lib/image";
 import { useOnline } from "@/lib/offline/hooks";
 import { REGISTERED_PARTIES } from "@/lib/parties";
+import { diffScores } from "@/lib/rules/diff";
 import type { UnitStatus } from "@/lib/schemas";
 import { ensureSession } from "@/lib/supabase/browser";
 
 /** Where the official figure came from. Shown next to every comparison. */
-const SOURCES: { value: string; label: MessageKey }[] = [
-  { value: "INEC IReV", label: "collation.source.irev" },
-  { value: "Collation centre announcement", label: "collation.source.announcement" },
-  { value: "EC8B collation sheet", label: "collation.source.ec8b" },
-  { value: "Other", label: "collation.source.other" },
+const SOURCES: { value: string; label: MessageKey; icon: LucideIcon }[] = [
+  { value: "INEC IReV", label: "collation.source.irev", icon: Globe },
+  { value: "Collation centre announcement", label: "collation.source.announcement", icon: Megaphone },
+  { value: "EC8B collation sheet", label: "collation.source.ec8b", icon: FileText },
+  { value: "Other", label: "collation.source.other", icon: Building2 },
 ];
 
+/** Party avatars cycle through the election palette so each row is easy to track by eye. */
+const AVATAR = ["bg-e-pres", "bg-e-gov", "bg-e-sen", "bg-e-reps", "bg-e-assembly", "bg-e-chair", "bg-e-council"];
+const avatarFor = (party: string) => AVATAR[[...party].reduce((h, c) => h + c.charCodeAt(0), 0) % AVATAR.length];
+
+const number = new Intl.NumberFormat("en-NG");
+const fmt = (n: number) => number.format(n);
+
 type Wall = { status: UnitStatus; scores: Record<string, number> | null };
+type Verdict = "checking" | "waiting" | "enter" | "match" | "differ";
 
 /**
- * Enter the official (announced / IReV) figure for one polling unit, typed or read from a
- * picture, and compare it with what the witnesses verified on the wall.
+ * The tally board: pick a polling unit, enter the official (announced / IReV) figure, typed or
+ * read from a picture, and see it beside what witnesses verified on the wall, party by party.
  */
 export function CollationForm() {
   const router = useRouter();
   const online = useOnline();
   const picker = useUnitPicker(online);
-  const { unitId, unitCode } = picker.selection;
+  const { unitId, unitCode, unitName } = picker.selection;
   const [election, setElection] = useState<Election>(DEFAULT_ELECTION);
   const [wall, setWall] = useState<{ key: string; value: Wall } | null>(null);
   const [scores, setScores] = useState<Record<string, string>>({});
@@ -44,7 +59,7 @@ export function CollationForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // The verified wall result for this unit and election, to show beside each box.
+  // The verified wall result for this unit and election, shown beside each figure.
   const wallKey = unitCode ? `${unitCode}/${election}` : "";
   useEffect(() => {
     if (!wallKey || !unitCode) return;
@@ -58,11 +73,24 @@ export function CollationForm() {
     return () => { active = false; };
   }, [wallKey, unitCode, election]);
   const current = wall?.key === wallKey ? wall.value : null;
+  const wallScores = current?.scores ?? null;
 
-  const base = current?.scores ? Object.keys(current.scores).sort() : [...REGISTERED_PARTIES];
+  const base = wallScores ? Object.keys(wallScores).sort() : [...REGISTERED_PARTIES];
   const parties = [...new Set([...base, ...extra])];
-  const total = parties.reduce((s, p) => s + Number(scores[p] || 0), 0);
   const newCode = newParty.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+
+  // Compared exactly as the server does: only parties with a figure are sent, a blank counts as 0.
+  const entered = Object.fromEntries(parties.filter((p) => scores[p]).map((p) => [p, Number(scores[p])]));
+  const anyEntered = Object.keys(entered).length > 0;
+  const diffs = wallScores && anyEntered ? diffScores(wallScores, entered) : null;
+  const diffBy = new Map(diffs?.map((d) => [d.party, d]));
+  const differing = diffs?.filter((d) => d.difference !== 0) ?? [];
+  const gap = differing.reduce((s, d) => s + Math.abs(d.difference), 0);
+  const announcedTotal = Object.values(entered).reduce((s, n) => s + n, 0);
+  const wallTotal = wallScores ? Object.values(wallScores).reduce((s, n) => s + n, 0) : null;
+
+  const verdict: Verdict = !current ? "checking" : !wallScores ? "waiting" : !anyEntered ? "enter" : differing.length ? "differ" : "match";
+  const style = ELECTION_STYLE[election];
 
   function reset() {
     setScores({});
@@ -111,14 +139,9 @@ export function CollationForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!unitId) return;
-    setBusy(true);
     setError(null);
-    // Only parties with a figure entered.
-    const partyScores = Object.fromEntries(parties.filter((p) => scores[p]).map((p) => [p, Number(scores[p])]));
-    if (!Object.keys(partyScores).length) {
-      setBusy(false);
-      return setError(t("collation.empty"));
-    }
+    if (!anyEntered) return setError(t("collation.empty"));
+    setBusy(true);
     if (!(await ensureSession())) {
       setBusy(false);
       return setError(t("collation.failed"));
@@ -131,7 +154,7 @@ export function CollationForm() {
         election,
         areaCode: unitCode ?? unitId, // the server replaces this with the unit's ward for ward-level lines
         unitId,
-        partyScores,
+        partyScores: entered,
         source,
         announcedAt: new Date().toISOString(),
       }),
@@ -143,99 +166,280 @@ export function CollationForm() {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-5 animate-rise">
-      <ElectionTabs value={election} onChange={(v) => { setElection(v); reset(); }} />
-      <UnitPickerFields picker={picker} showArea={false} />
+    <form onSubmit={submit} className="flex flex-col gap-6">
+      {/* ── Hero: the promise, the election, the unit ─────────────────────── */}
+      <HeroPanel
+        id="collate-doodles"
+        eyebrow={t("collation.hero.eyebrow")}
+        eyebrowIcon={Scale}
+        title={t("collation.hero.title")}
+        highlight={t("collation.hero.title2")}
+        highlightClass={style.text}
+        subtitle={t("collation.hero.sub")}
+        aside={
+          <ol className="hidden flex-col gap-2 text-sm md:flex lg:w-72">
+            {(["collation.step.pick", "collation.step.enter", "collation.step.compare"] as const).map((k, i) => (
+              <li key={k} className="flex items-center gap-3 rounded-2xl bg-frame-ink/[0.07] px-3 py-2.5">
+                <span className={`grid size-7 shrink-0 place-items-center rounded-full font-mono text-xs font-bold text-e-ink ${style.bg}`}>{i + 1}</span>
+                {t(k)}
+              </li>
+            ))}
+          </ol>
+        }
+      >
+        <div role="tablist" aria-label={t("election.label")} className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:grid lg:grid-cols-7 lg:overflow-visible lg:px-0 lg:pb-0">
+          {ELECTIONS.map((e) => {
+            const s = ELECTION_STYLE[e];
+            const active = e === election;
+            return (
+              <button
+                key={e}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => { setElection(e); reset(); }}
+                className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full py-1.5 pr-4 pl-1.5 text-sm font-semibold whitespace-nowrap transition active:scale-[0.97] lg:min-w-0 lg:pr-3 ${
+                  active ? `${s.bg} text-e-ink shadow-lift` : "bg-frame-ink/[0.07] text-frame-ink hover:bg-frame-ink/[0.13]"
+                }`}
+              >
+                <span className={`grid size-8 shrink-0 place-items-center rounded-full ${active ? "bg-e-ink/10" : `${s.bg} text-e-ink`}`}>
+                  <s.icon aria-hidden className="size-4" strokeWidth={2.2} />
+                </span>
+                {t(`election.${e}`)}
+              </button>
+            );
+          })}
+        </div>
 
-      {unitId && (
-        <fieldset className="card flex flex-col gap-4 p-4 animate-rise">
-          <legend className="sr-only">{t("collation.announcedVotes")}</legend>
+        <HeroTray>
+          <UnitPickerFields picker={picker} showArea={false} gridClassName="grid grid-cols-2 gap-3 lg:grid-cols-4" />
+        </HeroTray>
+      </HeroPanel>
 
-          <label className={`btn btn-secondary min-h-13 cursor-pointer ${reading ? "pointer-events-none opacity-60" : ""}`}>
-            {reading ? <Loader2 aria-hidden className="size-5 animate-spin" /> : <ImageUp aria-hidden className="size-5" />}
-            {reading ? t("collation.reading") : t("collation.fromPicture")}
-            <input
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              disabled={reading}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (file) void readPicture(file);
-              }}
-            />
-          </label>
-          <p className="-mt-2 text-xs text-muted">{t("collation.fromPictureHint")}</p>
-          {readNote && (
-            <p role="status" className="flex gap-2 rounded-xl bg-sim-bg px-3 py-2.5 text-sm text-sim-text">
-              <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" /> {readNote}
-            </p>
-          )}
+      {/* ── Board ─────────────────────────────────────────────────────────── */}
+      {!unitId ? (
+        <EmptyBoard />
+      ) : (
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <section className="card flex min-w-0 flex-col overflow-hidden animate-rise" aria-label={t("collation.board")}>
+            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4 md:p-5">
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="eyebrow">{t("collation.board")}</span>
+                <span className="flex min-w-0 flex-wrap items-center gap-2">
+                  {unitCode && <span className="rounded-md bg-surface-2 px-2 py-0.5 font-mono text-xs font-medium text-muted">{unitCode}</span>}
+                  <span className="truncate font-semibold">{unitName}</span>
+                </span>
+                <span className="flex items-center gap-1 text-xs text-muted">
+                  <MapPin aria-hidden className="size-3.5" /> {[picker.ward, picker.lga, picker.state].filter(Boolean).join(" · ")}
+                </span>
+              </div>
+              <label className={`btn btn-gold min-h-11 cursor-pointer px-4 text-sm ${reading ? "pointer-events-none opacity-60" : ""}`}>
+                {reading ? <Loader2 aria-hidden className="size-4 animate-spin" /> : <ImageUp aria-hidden className="size-4" />}
+                {reading ? t("collation.reading") : t("collation.fromPicture")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={reading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void readPicture(file);
+                  }}
+                />
+              </label>
+            </header>
 
-          <div className="flex items-center justify-between border-t border-border pt-4">
-            <span className="text-sm font-semibold">{t("collation.announcedVotes")}</span>
-            <span className="font-mono text-sm text-muted tabular-nums">Σ {total}</span>
-          </div>
-          {current && !current.scores && <p className="-mt-2 text-xs text-muted">{t("collation.noWallYet")}</p>}
-          <div className="grid grid-cols-2 gap-3">
-            {parties.map((p) => {
-              const wallVotes = current?.scores?.[p];
-              const typed = scores[p];
-              const differs = wallVotes !== undefined && typed !== undefined && typed !== "" && Number(typed) !== wallVotes;
-              return (
-                <label key={p} className="flex flex-col gap-1.5">
-                  <span className="flex items-baseline justify-between gap-2 text-xs font-semibold text-muted">
-                    {p}
-                    {wallVotes !== undefined && (
-                      <span className={`font-mono font-medium ${differs ? "text-review-text" : ""}`}>{t("collation.wallValue", { n: wallVotes })}</span>
-                    )}
-                  </span>
-                  <input
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="—"
-                    value={typed ?? ""}
-                    onChange={(e) => setScores((s) => ({ ...s, [p]: e.target.value.replace(/\D/g, "") }))}
-                    className={`field text-center font-mono text-xl font-semibold tabular-nums ${differs ? "border-review-text" : ""}`}
-                  />
-                </label>
-              );
-            })}
-          </div>
-          <div className="flex gap-2 border-t border-border pt-4">
-            <input
-              value={newParty}
-              onChange={(e) => setNewParty(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addParty(); } }}
-              placeholder={t("collation.addParty")}
-              aria-label={t("collation.addParty")}
-              className="field min-h-11 flex-1 uppercase"
-            />
-            <button type="button" onClick={addParty} disabled={!newCode} className="btn btn-secondary min-h-11 px-4">
-              <Plus aria-hidden className="size-4" /> {t("collation.add")}
+            {readNote && (
+              <p role="status" className="mx-4 mt-4 flex gap-2 rounded-xl bg-sim-bg px-3 py-2.5 text-sm text-sim-text md:mx-5">
+                <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" /> {readNote}
+              </p>
+            )}
+
+            <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_minmax(0,7.5rem)_4.5rem] items-center gap-x-3 px-4 pt-4 pb-2 text-[11px] font-semibold tracking-wider text-muted uppercase md:grid-cols-[minmax(0,1fr)_6rem_10rem_6rem] md:px-5">
+              <span>{t("collation.col.party")}</span>
+              <span className="text-right">{t("collation.col.wall")}</span>
+              <span className="text-center">{t("collation.col.announced")}</span>
+              <span className="text-right">{t("collation.col.gap")}</span>
+            </div>
+
+            <ul className="flex flex-col px-2 md:px-3">
+              {parties.map((p) => {
+                const wallVotes = wallScores?.[p];
+                const typed = scores[p] ?? "";
+                const d = diffBy.get(p);
+                const off = !!d && d.difference !== 0;
+                return (
+                  <li
+                    key={p}
+                    className={`grid grid-cols-[minmax(0,1fr)_4.5rem_minmax(0,7.5rem)_4.5rem] items-center gap-x-3 rounded-2xl px-2 py-2 transition-colors md:grid-cols-[minmax(0,1fr)_6rem_10rem_6rem] ${
+                      off ? "bg-review-bg/60" : ""
+                    }`}
+                  >
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <span aria-hidden className={`grid size-9 shrink-0 place-items-center rounded-xl font-mono text-[11px] font-bold text-e-ink ${avatarFor(p)}`}>
+                        {p.slice(0, 3)}
+                      </span>
+                      <span className="truncate font-semibold">{p}</span>
+                    </span>
+                    <span className="text-right font-mono text-sm text-muted tabular-nums">{wallVotes === undefined ? "—" : fmt(wallVotes)}</span>
+                    <input
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="—"
+                      aria-label={`${p} ${t("collation.col.announced")}`}
+                      value={typed}
+                      onChange={(e) => setScores((s) => ({ ...s, [p]: e.target.value.replace(/\D/g, "") }))}
+                      className={`field min-h-11 text-center font-mono text-lg font-semibold tabular-nums ${off ? "border-review-text" : ""}`}
+                    />
+                    <GapBadge diff={d?.difference} blank={!typed && !!d} />
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="mx-4 mt-2 grid grid-cols-[minmax(0,1fr)_4.5rem_minmax(0,7.5rem)_4.5rem] items-center gap-x-3 border-t border-dashed border-border px-2 py-3 md:mx-5 md:grid-cols-[minmax(0,1fr)_6rem_10rem_6rem]">
+              <span className="text-sm font-bold">{t("collation.total")}</span>
+              <span className="text-right font-mono text-sm font-semibold tabular-nums">{wallTotal === null ? "—" : fmt(wallTotal)}</span>
+              <span className="text-center font-mono text-lg font-bold tabular-nums">{anyEntered ? fmt(announcedTotal) : "—"}</span>
+              <GapBadge diff={wallTotal !== null && anyEntered ? announcedTotal - wallTotal : undefined} />
+            </div>
+
+            <footer className="flex flex-col gap-2 border-t border-border bg-surface-2/40 p-4 md:p-5">
+              <div className="flex gap-2">
+                <input
+                  value={newParty}
+                  onChange={(e) => setNewParty(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addParty(); } }}
+                  placeholder={t("collation.addParty")}
+                  aria-label={t("collation.addParty")}
+                  className="field min-h-11 flex-1 bg-surface uppercase placeholder:normal-case"
+                />
+                <button type="button" onClick={addParty} disabled={!newCode} className="btn btn-secondary min-h-11 px-4">
+                  <Plus aria-hidden className="size-4" /> {t("collation.add")}
+                </button>
+              </div>
+              <p className="text-xs text-muted">{t("collation.partiesHint")}</p>
+            </footer>
+          </section>
+
+          {/* ── Verdict, source and save: stays in view while you type ───────── */}
+          <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
+            <VerdictCard verdict={verdict} differing={differing.length} gap={gap} />
+
+            <fieldset className="card flex flex-col gap-2 p-4">
+              <legend className="contents">
+                <span className="mb-1 text-sm font-semibold">{t("collation.source")}</span>
+              </legend>
+              {SOURCES.map((s) => {
+                const active = s.value === source;
+                return (
+                  <label
+                    key={s.value}
+                    className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border px-3 text-sm font-medium transition ${
+                      active ? "border-text bg-surface shadow-card" : "border-border hover:bg-surface-2/60"
+                    }`}
+                  >
+                    <input type="radio" name="source" value={s.value} checked={active} onChange={() => setSource(s.value)} className="sr-only" />
+                    <span className={`grid size-8 shrink-0 place-items-center rounded-xl ${active ? "bg-brand text-brand-ink" : "bg-surface-2 text-muted"}`}>
+                      <s.icon aria-hidden className="size-4" />
+                    </span>
+                    <span className="flex-1">{t(s.label)}</span>
+                    {active && <Check aria-hidden className="size-4 text-brand" />}
+                  </label>
+                );
+              })}
+            </fieldset>
+
+            {error && <p role="alert" className="rounded-2xl bg-review-bg p-4 text-sm text-review-text">{error}</p>}
+
+            <button disabled={busy || reading} className="btn btn-primary min-h-14 text-base">
+              {busy ? <Loader2 aria-hidden className="size-5 animate-spin" /> : <Send aria-hidden className="size-5" />}
+              {busy ? t("common.saving") : t("collation.submit")}
             </button>
-          </div>
-          <p className="text-xs text-muted">{t("collation.partiesHint")}</p>
-        </fieldset>
+          </aside>
+        </div>
       )}
-
-      <label className="flex flex-col gap-2">
-        <span className="text-sm font-semibold">{t("collation.source")}</span>
-        <span className="relative block">
-          <FileCheck2 aria-hidden className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted" />
-          <select value={source} onChange={(e) => setSource(e.target.value)} className="field appearance-none pr-10 pl-12 font-medium">
-            {SOURCES.map((s) => <option key={s.value} value={s.value}>{t(s.label)}</option>)}
-          </select>
-          <ChevronsUpDown aria-hidden className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted" />
-        </span>
-      </label>
-
-      {error && <p role="alert" className="rounded-2xl bg-review-bg p-4 text-sm text-review-text">{error}</p>}
-
-      <button disabled={!unitId || busy || reading} className="btn btn-primary min-h-14 text-base">
-        <Send aria-hidden className="size-5" /> {busy ? t("common.saving") : t("collation.submit")}
-      </button>
     </form>
+  );
+}
+
+/** "=" when a party agrees, the signed gap when it doesn't, "—" when there is nothing to compare. */
+function GapBadge({ diff, blank }: { diff: number | undefined; blank?: boolean }) {
+  if (diff === undefined) return <span className="text-right font-mono text-sm text-muted">—</span>;
+  if (diff === 0)
+    return (
+      <span className="flex justify-end">
+        <span className="inline-flex items-center gap-1 rounded-full bg-ok-bg px-2 py-1 text-xs font-bold text-ok-text">
+          <Check aria-hidden className="size-3.5" strokeWidth={3} />
+        </span>
+      </span>
+    );
+  return (
+    <span className="flex justify-end" title={blank ? t("collation.blankZero") : undefined}>
+      <span className={`rounded-full px-2 py-1 font-mono text-xs font-bold tabular-nums ${blank ? "border border-dashed border-review-text/50 text-review-text" : "bg-accent text-e-ink"}`}>
+        {signed(diff)}
+      </span>
+    </span>
+  );
+}
+
+function VerdictCard({ verdict, differing, gap }: { verdict: Verdict; differing: number; gap: number }) {
+  const look: Record<Verdict, { icon: LucideIcon; tone: string; title: string; body?: string }> = {
+    checking: { icon: Loader2, tone: "bg-frame-ink/10 text-frame-ink", title: t("collation.verdict.checking") },
+    waiting: { icon: Clock, tone: "bg-frame-ink/10 text-frame-ink", title: t("collation.verdict.waiting"), body: t("collation.noWallYet") },
+    enter: { icon: ArrowRight, tone: "bg-frame-ink/10 text-frame-ink", title: t("collation.verdict.enter"), body: t("collation.verdict.enterBody") },
+    match: { icon: Check, tone: "bg-pop text-e-ink", title: t("collation.verdict.match"), body: t("collation.verdict.matchBody") },
+    differ: {
+      icon: TriangleAlert,
+      tone: "bg-accent text-e-ink",
+      title: differing === 1 ? t("collation.verdict.differOne") : t("collation.verdict.differ", { n: differing }),
+      body: t("collation.verdict.differBody", { n: fmt(gap) }),
+    },
+  };
+  const v = look[verdict];
+  return (
+    <section aria-live="polite" className="relative overflow-hidden rounded-[1.75rem] bg-frame-2 p-5 text-frame-ink shadow-lift">
+      <DoodlePattern id="verdict-doodles" scale={0.6} className="text-frame-ink opacity-[0.05]" />
+      <div className="relative flex flex-col gap-3">
+        <span className="eyebrow text-frame-muted">{t("collation.verdict")}</span>
+        <div className="flex items-center gap-3">
+          <span className={`grid size-12 shrink-0 place-items-center rounded-2xl ${v.tone}`}>
+            <v.icon aria-hidden className={`size-6 ${verdict === "checking" ? "animate-spin" : ""}`} strokeWidth={2.4} />
+          </span>
+          <p className="display text-2xl leading-tight">{v.title}</p>
+        </div>
+        {v.body && <p className="text-sm text-frame-muted">{v.body}</p>}
+      </div>
+    </section>
+  );
+}
+
+/** Before a unit is chosen: what the board will do, drawn as two sheets facing off. */
+function EmptyBoard() {
+  const sheet = (label: string, tone: string) => (
+    <div className="flex w-28 flex-col gap-2 rounded-2xl border border-border bg-surface p-3 shadow-card md:w-36">
+      <span className={`w-fit rounded-md px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-wider text-e-ink uppercase ${tone}`}>{label}</span>
+      {[80, 60, 72, 44].map((w, i) => (
+        <span key={i} className="flex items-center gap-2">
+          <span className="h-1.5 rounded-full bg-surface-2" style={{ width: `${w}%` }} />
+        </span>
+      ))}
+    </div>
+  );
+  return (
+    <section className="flex flex-col items-center gap-6 rounded-[2rem] border-2 border-dashed border-border px-6 py-10 text-center md:py-14">
+      <div aria-hidden className="flex items-center gap-3 md:gap-5">
+        <div className="-rotate-6">{sheet(t("collation.col.wall"), "bg-e-gov")}</div>
+        <span className="grid size-11 place-items-center rounded-full bg-frame-2 text-frame-ink shadow-lift">
+          <Scale className="size-5" />
+        </span>
+        <div className="rotate-6">{sheet(t("collation.col.announced"), "bg-e-pres")}</div>
+      </div>
+      <div className="flex max-w-md flex-col gap-2">
+        <p className="display text-2xl">{t("collation.emptyBoard.title")}</p>
+        <p className="text-sm text-muted">{t("collation.emptyBoard.body")}</p>
+      </div>
+    </section>
   );
 }

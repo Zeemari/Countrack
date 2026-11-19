@@ -7,8 +7,12 @@ import type { UnitStatus } from "@/lib/schemas";
  * counting and paging all happen in the database. The page only ever receives one page of rows.
  */
 
-export type Filter = "all" | UnitStatus | "mismatch";
-export const FILTERS: Filter[] = ["all", "verified", "pending", "flagged", "mismatch"];
+/**
+ * The tiles: every unit, units whose CounTrack result is verified and agrees with the announced
+ * figures, and units where the announced figures disagree with CounTrack.
+ */
+export type Filter = "all" | "verified" | "mismatch";
+export const FILTERS: Filter[] = ["all", "verified", "mismatch"];
 export type Sort = "code" | "name" | "state";
 export const SORTS: Sort[] = ["code", "name", "state"];
 export const PAGE_SIZES = [12, 24, 48];

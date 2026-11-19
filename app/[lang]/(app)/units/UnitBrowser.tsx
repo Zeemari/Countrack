@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowUpRight, ChevronDown, CircleCheck, Clock, LayoutGrid, List, Loader2, MapPin, Rows3, Scale, Search, SearchX, TriangleAlert,
+  ArrowUpRight, ChevronDown, CircleCheck, LayoutGrid, List, Loader2, MapPin, Rows3, Scale, Search, SearchX,
   Truck, X, type LucideIcon,
 } from "lucide-react";
 import { ElectionTabs } from "@/components/ElectionTabs";
@@ -13,16 +13,17 @@ import { StatusBadge, WitnessMeter } from "@/components/StatusBadge";
 import { electionLinks, type Election } from "@/lib/elections";
 import { t, type MessageKey } from "@/lib/i18n";
 import { useAppPath } from "@/lib/i18n/path";
+import { HeroTray } from "@/components/HeroPanel";
+import { UnitsHero } from "./UnitsHero";
 import { PAGE_SIZES, SORTS, type Filter, type UnitCardData, type UnitsPage, type UnitsQuery } from "./shared";
 
 export type { UnitCardData };
 
-const TILES: { key: Filter; label: MessageKey; icon: LucideIcon; tone: string; bar: string }[] = [
-  { key: "all", label: "units.filter.all", icon: Rows3, tone: "text-text", bar: "bg-text" },
-  { key: "verified", label: "status.verified", icon: CircleCheck, tone: "text-ok-text", bar: "bg-brand" },
-  { key: "pending", label: "status.pending", icon: Clock, tone: "text-pending-text", bar: "bg-muted" },
-  { key: "flagged", label: "status.flagged", icon: TriangleAlert, tone: "text-review-text", bar: "bg-accent" },
-  { key: "mismatch", label: "units.filter.mismatch", icon: Scale, tone: "text-review-text", bar: "bg-accent" },
+/** Each tile's colour: solid when selected, used for its icon and bar otherwise. */
+const TILES: { key: Filter; label: MessageKey; icon: LucideIcon; color: string }[] = [
+  { key: "all", label: "units.filter.all", icon: Rows3, color: "bg-e-reps" },
+  { key: "verified", label: "status.verified", icon: CircleCheck, color: "bg-pop" },
+  { key: "mismatch", label: "units.filter.mismatch", icon: Scale, color: "bg-accent" },
 ];
 
 const number = new Intl.NumberFormat("en-NG");
@@ -82,86 +83,90 @@ export function UnitBrowser({ query: asked, units, total, page, counts, states }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Summary tiles double as the status filter. */}
-      <div role="tablist" aria-label={t("units.filter.label")} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {TILES.map(({ key, label, icon: Icon, tone, bar }, i) => {
-          const active = query.status === key;
-          const n = counts[key];
-          const share = counts.all && n ? (n / counts.all) * 100 : 0;
-          return (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={active}
-              onClick={() => go({ status: key })}
-              className={`flex flex-col gap-3 rounded-2xl border p-4 text-left transition ${i === 0 ? "col-span-2 sm:col-span-1" : ""} ${
-                active ? "border-text bg-surface shadow-card" : "border-border bg-surface/60 hover:bg-surface"
-              }`}
-            >
-              <span className="flex items-center justify-between gap-2 text-sm font-medium text-muted">
-                {t(label)}
-                <Icon aria-hidden className={`size-4 ${tone}`} />
-              </span>
-              <span className="font-display text-3xl leading-none font-bold tabular-nums">{n === null ? "—" : number.format(n)}</span>
-              <span aria-hidden className="h-1 overflow-hidden rounded-full bg-surface-2">
-                <span className={`block h-full rounded-full ${bar}`} style={{ width: `${key === "all" ? 100 : Math.max(share, n ? 2 : 0)}%` }} />
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Toolbar */}
-      <div className="flex flex-col gap-3 rounded-3xl border border-border bg-surface p-3 shadow-card">
-        <ElectionTabs value={query.election} links={electionLinks((e: Election) => hrefFor({ ...query, election: e, page: 1 }, path, view))} />
-        <div className="flex flex-col gap-2 lg:flex-row">
-          <div className="relative flex-1">
-            <Search aria-hidden className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted" />
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("units.search")}
-              aria-label={t("units.search")}
-              className="field min-h-12 bg-bg pr-11 pl-12"
-            />
-            {pending ? (
-              <Loader2 aria-hidden className="absolute top-1/2 right-4 size-4 -translate-y-1/2 animate-spin text-muted" />
-            ) : search ? (
+      <UnitsHero>
+        {/* Summary tiles double as the status filter. */}
+        <div role="tablist" aria-label={t("units.filter.label")} className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:gap-3">
+          {TILES.map(({ key, label, icon: Icon, color }, i) => {
+            const active = query.status === key;
+            const n = counts[key];
+            const share = counts.all && n ? (n / counts.all) * 100 : 0;
+            return (
               <button
-                onClick={() => setSearch("")}
-                aria-label={t("compare.clear")}
-                className="absolute top-1/2 right-3 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-surface-2 text-muted"
+                key={key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => go({ status: key })}
+                className={`flex flex-col gap-3 rounded-2xl p-4 text-left transition active:scale-[0.98] ${i === 0 ? "col-span-2 sm:col-span-1" : ""} ${
+                  active ? `${color} text-e-ink shadow-lift` : "bg-frame-ink/[0.07] text-frame-ink hover:bg-frame-ink/[0.13]"
+                }`}
               >
-                <X aria-hidden className="size-4" />
+                <span className="flex items-center justify-between gap-2 text-sm font-semibold">
+                  {t(label)}
+                  <span className={`grid size-8 place-items-center rounded-xl ${active ? "bg-e-ink/10" : `${color} text-e-ink`}`}>
+                    <Icon aria-hidden className="size-4" strokeWidth={2.2} />
+                  </span>
+                </span>
+                <span className="display text-4xl leading-none tabular-nums">{n === null ? "—" : number.format(n)}</span>
+                <span aria-hidden className={`h-1.5 overflow-hidden rounded-full ${active ? "bg-e-ink/15" : "bg-frame-ink/10"}`}>
+                  <span className={`block h-full rounded-full ${active ? "bg-e-ink" : color}`} style={{ width: `${key === "all" ? 100 : Math.max(share, n ? 2 : 0)}%` }} />
+                </span>
               </button>
-            ) : null}
-          </div>
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-2 lg:flex">
-            <ToolbarSelect label={t("units.state.label")} value={query.state} onChange={(v) => go({ state: v })} className="lg:w-48">
-              <option value="">{t("units.state.all")}</option>
-              {states.map((s) => <option key={s} value={s}>{s}</option>)}
-            </ToolbarSelect>
-            <ToolbarSelect label={t("units.sort.label")} value={query.sort} onChange={(v) => go({ sort: v as UnitsQuery["sort"] })} className="lg:w-44">
-              {SORTS.map((s) => <option key={s} value={s}>{t(`units.sort.${s}`)}</option>)}
-            </ToolbarSelect>
-            <div role="group" aria-label={t("units.view.label")} className="flex shrink-0 gap-1 rounded-2xl bg-surface-2 p-1">
-              {([["grid", LayoutGrid], ["list", List]] as const).map(([v, Icon]) => (
+            );
+          })}
+        </div>
+
+        {/* Toolbar */}
+        <HeroTray>
+          <ElectionTabs value={query.election} links={electionLinks((e: Election) => hrefFor({ ...query, election: e, page: 1 }, path, view))} />
+          <div className="flex flex-col gap-2 lg:flex-row">
+            <div className="relative flex-1">
+              <Search aria-hidden className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("units.search")}
+                aria-label={t("units.search")}
+                className="field min-h-12 bg-surface pr-11 pl-12"
+              />
+              {pending ? (
+                <Loader2 aria-hidden className="absolute top-1/2 right-4 size-4 -translate-y-1/2 animate-spin text-muted" />
+              ) : search ? (
                 <button
-                  key={v}
-                  type="button"
-                  aria-pressed={view === v}
-                  aria-label={t(`units.view.${v}`)}
-                  onClick={() => pickView(v)}
-                  className={`grid size-10 place-items-center rounded-xl transition ${view === v ? "bg-surface text-text shadow-card" : "text-muted hover:text-text"}`}
+                  onClick={() => setSearch("")}
+                  aria-label={t("compare.clear")}
+                  className="absolute top-1/2 right-3 grid size-7 -translate-y-1/2 place-items-center rounded-full bg-surface-2 text-muted"
                 >
-                  <Icon aria-hidden className="size-4.5" />
+                  <X aria-hidden className="size-4" />
                 </button>
-              ))}
+              ) : null}
+            </div>
+            <div className="grid grid-cols-[1fr_1fr_auto] gap-2 lg:flex">
+              <ToolbarSelect label={t("units.state.label")} value={query.state} onChange={(v) => go({ state: v })} className="lg:w-48">
+                <option value="">{t("units.state.all")}</option>
+                {states.map((s) => <option key={s} value={s}>{s}</option>)}
+              </ToolbarSelect>
+              <ToolbarSelect label={t("units.sort.label")} value={query.sort} onChange={(v) => go({ sort: v as UnitsQuery["sort"] })} className="lg:w-44">
+                {SORTS.map((s) => <option key={s} value={s}>{t(`units.sort.${s}`)}</option>)}
+              </ToolbarSelect>
+              <div role="group" aria-label={t("units.view.label")} className="flex shrink-0 gap-1 rounded-2xl bg-surface-2 p-1">
+                {([["grid", LayoutGrid], ["list", List]] as const).map(([v, Icon]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={view === v}
+                    aria-label={t(`units.view.${v}`)}
+                    onClick={() => pickView(v)}
+                    className={`grid size-10 place-items-center rounded-xl transition ${view === v ? "bg-surface text-text shadow-card" : "text-muted hover:text-text"}`}
+                  >
+                    <Icon aria-hidden className="size-4.5" />
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </HeroTray>
+      </UnitsHero>
 
       {/* Results */}
       <section ref={resultsRef} className={`flex scroll-mt-24 flex-col gap-4 transition-opacity ${pending ? "opacity-60" : ""}`} aria-busy={pending}>
