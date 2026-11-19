@@ -35,7 +35,7 @@ don't match the wall.
 
 ## SMS incident sandbox
 
-Open `/incidents` to submit a **simulated** incoming SMS and view the sanitized incident feed. The demo page does not send a real text. It validates the message against the real polling-unit directory and records reports as unreviewed. Apply `supabase/migrations/20261120000000_incident_reports.sql` in the Supabase SQL Editor before using it.
+Open `/incidents` to submit a **simulated** incoming SMS and view the sanitized incident feed. The demo page does not send a real text. It validates the message against the real polling-unit directory and records reports as unreviewed. For a fresh database, apply `supabase/migrations/20261120000000_sms_incident_reports.sql` followed by `supabase/migrations/20261120000200_sms_incident_reports_reconcile.sql`. For an existing database, apply the reconciliation migration; it preserves the separate public-verification `incident_reports` table and renames an earlier SMS-shaped table if one exists, or creates `sms_incident_reports` beside it.
 
 For Africa's Talking sandbox callbacks, deploy the app to a publicly reachable HTTPS URL, create a sandbox two-way SMS shortcode, and set its incoming SMS callback to `https://<your-domain>/api/sms/inbound?token=<AT_CALLBACK_TOKEN>`. Set `AT_CALLBACK_TOKEN`, `AFRICASTALKING_API_KEY`, and `AFRICASTALKING_SHORTCODE` in the deployment environment so the route authenticates callbacks and can send a sandbox reply. Test using Africa's Talking's web simulator; sandbox messages do not reach real handsets. The accepted report format is `PU37/05/04/017VUB` (also accepts `COUNTRACK PU37/05/04/017VUB` for a shared keyword). Incident reports are not proof that an incident occurred.
 

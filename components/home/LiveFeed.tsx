@@ -35,7 +35,7 @@ const KINDS: { key: FeedKind | "all"; label: MessageKey }[] = [
   { key: "verified", label: "feed.kind.verified" },
   { key: "flagged", label: "feed.kind.flagged" },
   { key: "mismatch", label: "feed.kind.mismatch" },
-  { key: "incident", label: "feed.kind.incidentReport" },
+  { key: "incident", label: "feed.kind.incidents" },
 ];
 
 /**
@@ -129,7 +129,14 @@ export function LiveFeed() {
             options={[["all", t("feed.allElections")], ...ELECTIONS.map((e) => [e, t(`election.${e}`)] as [Election, string])]}
             onChange={(v) => { setElection(v); setEvents(null); setShown(PAGE); seen.current.clear(); }}
           />
-          <Chips label={t("feed.kind.label")} value={kind} options={KINDS.map((k) => [k.key, t(k.label)])} onChange={(v) => { setKind(v); setShown(PAGE); }} small />
+          <Chips
+            label={t("feed.kind.label")}
+            value={kind}
+            options={KINDS.map((k) => [k.key, t(k.label)])}
+            onChange={(v) => { setKind(v); setShown(PAGE); }}
+            small
+            link={{ href: "/incidents", label: t("feed.kind.incidentReport") }}
+          />
         </div>
 
         {usingCachedIncidents && hasOfflineIncidentData && (
@@ -167,25 +174,32 @@ export function LiveFeed() {
   );
 }
 
-function Chips<T extends string>({ label, value, options, onChange, small }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void; small?: boolean }) {
+function Chips<T extends string>({ label, value, options, onChange, small, link }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void; small?: boolean; link?: { href: string; label: string } }) {
   return (
-    <div role="tablist" aria-label={label} className="-mx-4 flex justify-start gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:justify-center">
-      {options.map(([v, l]) => {
-        const active = v === value;
-        return (
-          <button
-            key={v}
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(v)}
-            className={`shrink-0 rounded-full border font-medium transition ${small ? "min-h-8 px-3 text-xs" : "min-h-10 px-4 text-sm"} ${
-              active ? "border-text bg-text text-bg" : "border-border bg-surface text-muted hover:text-text"
-            }`}
-          >
-            {l}
-          </button>
-        );
-      })}
+    <div className="-mx-4 flex justify-start gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:justify-center">
+      <div role="tablist" aria-label={label} className="flex shrink-0 gap-2">
+        {options.map(([v, l]) => {
+          const active = v === value;
+          return (
+            <button
+              key={v}
+              role="tab"
+              aria-selected={active}
+              onClick={() => onChange(v)}
+              className={`shrink-0 rounded-full border font-medium transition ${small ? "min-h-8 px-3 text-xs" : "min-h-10 px-4 text-sm"} ${
+                active ? "border-text bg-text text-bg" : "border-border bg-surface text-muted hover:text-text"
+              }`}
+            >
+              {l}
+            </button>
+          );
+        })}
+      </div>
+      {link && (
+        <Link href={link.href} className={`shrink-0 rounded-full border border-border bg-surface font-medium text-muted transition hover:text-text ${small ? "min-h-8 px-3 text-xs" : "min-h-10 px-4 text-sm"}`}>
+          {link.label}
+        </Link>
+      )}
     </div>
   );
 }
