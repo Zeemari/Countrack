@@ -25,7 +25,7 @@ export function LanguageSwitcher() {
   function choose(code: Lang) {
     setOpen(false);
     if (code === lang) return;
-    switchLang(code);
+    void switchLang(code);
   }
 
   return (
