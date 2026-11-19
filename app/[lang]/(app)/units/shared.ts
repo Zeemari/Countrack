@@ -59,4 +59,3 @@ export function parseUnitsQuery(sp: Record<string, string | string[] | undefined
     size: PAGE_SIZES.includes(size) ? size : 12,
   };
 }
-

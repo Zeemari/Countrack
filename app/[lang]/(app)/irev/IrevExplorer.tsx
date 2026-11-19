@@ -304,4 +304,3 @@ function Ring({ value, total, className = "" }: { value: number; total: number; 
     </svg>
   );
 }
-

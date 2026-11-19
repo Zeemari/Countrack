@@ -1,4 +1,4 @@
-import { Camera, ClipboardPen, CloudUpload, House, MapPin, ScanSearch, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Camera, ClipboardPen, CloudUpload, House, MapPin, ScanSearch, type LucideIcon } from "lucide-react";
 import type { MessageKey } from "@/lib/i18n";
 
 /** Labels are message keys, translated where they render (this module loads before any language is known). */
@@ -14,4 +14,5 @@ export const NAV = {
   },
   irev: { href: "/irev", short: "nav.irev", long: "nav.irev.long", icon: ScanSearch, match: (p) => p.startsWith("/irev") },
   collate: { href: "/collation", short: "nav.collate", long: "nav.collate.long", icon: ClipboardPen, match: (p) => p.startsWith("/collation") },
+  incidents: { href: "/incidents", short: "nav.incidents", long: "nav.incidents", icon: AlertTriangle, match: (p) => p.startsWith("/incidents") },
 } satisfies Record<string, NavItem>;

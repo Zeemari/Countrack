@@ -33,6 +33,12 @@ don't match the wall.
 | `npm run icons` | Regenerate PWA PNG icons from `public/icons/icon.svg` |
 | `npm run fixture -- <photoId>` | Save a real reading as a `DEMO_MODE` cached fixture |
 
+## SMS incident sandbox
+
+Open `/incidents` to submit a **simulated** incoming SMS and view the sanitized incident feed. The demo page does not send a real text. It validates the message against the real polling-unit directory and records reports as unreviewed. Apply `supabase/migrations/20261120000000_incident_reports.sql` in the Supabase SQL Editor before using it.
+
+For Africa's Talking sandbox callbacks, deploy the app to a publicly reachable HTTPS URL, create a sandbox two-way SMS shortcode, and set its incoming SMS callback to `https://<your-domain>/api/sms/inbound?token=<AT_CALLBACK_TOKEN>`. Set `AT_CALLBACK_TOKEN`, `AFRICASTALKING_API_KEY`, and `AFRICASTALKING_SHORTCODE` in the deployment environment so the route authenticates callbacks and can send a sandbox reply. Test using Africa's Talking's web simulator; sandbox messages do not reach real handsets. The accepted report format is `PU37/05/04/017VUB` (also accepts `COUNTRACK PU37/05/04/017VUB` for a shared keyword). Incident reports are not proof that an incident occurred.
+
 ## Polling unit directory API
 
 `GET /api/polling-units` serves real directory records from Supabase. Search with `?code=01/02/03/004` for a full PVC polling-unit code, or use `?q=market&state=Lagos&limit=20&offset=0` for paginated text search. The capture form loads its State → LGA → Ward → Polling unit options from `?level=states`, `?level=lgas&state=Lagos`, `?level=wards&state=Lagos&lga=Ikeja`, and `?level=units&state=Lagos&lga=Ikeja&ward=...`. Responses include dataset provenance. Simulated `SIM-*` demo units are excluded from the real directory API and remain available in the existing demo experience.
@@ -40,7 +46,7 @@ don't match the wall.
 To import real directory data:
 
 1. Apply `supabase/migrations/20261119000000_polling_unit_directory.sql` in the Supabase SQL Editor.
-2. Set `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env`.
+2. Set `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
 3. Run `npm run import:polling-units`.
 
 The importer resolves the selected GitHub ref to a commit, validates the source manifest, row count, full codes, and duplicates, then upserts in batches. It marks older imported snapshots inactive only after the new snapshot has fully imported. By default it uses the source repo's `main` branch; set `INEC_DATASET_REF` to a 40-character commit SHA for a repeatable import. The source is the community-maintained [`nigeria-inec-geo`](https://github.com/saidiadegoke/nigeria-inec-geo) snapshot of INEC's public CVR directory; check records against INEC before relying on them. This import contains names and administrative locations, not verified directions or coordinates.
