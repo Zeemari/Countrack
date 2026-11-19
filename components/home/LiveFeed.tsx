@@ -8,6 +8,7 @@ import type { FeedEvent, FeedKind } from "@/lib/feed";
 import { photoUrl, shortHash, signed } from "@/lib/format";
 import { t, type MessageKey } from "@/lib/i18n";
 import { readIncidentFeed, saveIncidentFeed } from "@/lib/offline/incident-feed";
+import { HideButton, HideFeedDialog } from "./HideFeedItem";
 
 const POLL_MS = 20_000;
 const PAGE = 8;
@@ -19,6 +20,17 @@ const subscribeNow = (cb: () => void) => {
   return () => window.clearInterval(id);
 };
 const useNow = () => useSyncExternalStore(subscribeNow, () => Math.floor(Date.now() / 30_000) * 30_000, () => 0);
+
+// Browser connectivity. Assumed online on the server and during hydration.
+const subscribeOnline = (cb: () => void) => {
+  window.addEventListener("online", cb);
+  window.addEventListener("offline", cb);
+  return () => {
+    window.removeEventListener("online", cb);
+    window.removeEventListener("offline", cb);
+  };
+};
+const useOnline = () => useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
 
 function ago(iso: string, now: number) {
   if (!now) return "";
@@ -49,27 +61,17 @@ export function LiveFeed() {
   const [events, setEvents] = useState<FeedEvent[] | null>(null);
   const [cachedIncidents, setCachedIncidents] = useState<Extract<FeedEvent, { kind: "incident" }>[]>([]);
   const [incidentCacheAt, setIncidentCacheAt] = useState<number | null>(null);
-  const [online, setOnline] = useState(true);
+  const online = useOnline();
   const [failed, setFailed] = useState(false);
   const [shown, setShown] = useState(PAGE);
   const seen = useRef(new Set<string>());
   const [fresh, setFresh] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    const cached = readIncidentFeed();
-    if (cached) {
-      setCachedIncidents(cached.events);
-      setIncidentCacheAt(cached.savedAt);
-    }
-    const update = () => setOnline(navigator.onLine);
-    update();
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-    };
-  }, []);
+  const [hiding, setHiding] = useState<FeedEvent | null>(null);
+  /** Drop an item an admin just removed, without waiting for the next poll. */
+  const removeEvent = (id: string) => {
+    setEvents((evs) => evs?.filter((e) => e.id !== id) ?? evs);
+    setCachedIncidents((evs) => evs.filter((e) => e.id !== id));
+  };
 
   useEffect(() => {
     let active = true;
@@ -92,7 +94,14 @@ export function LiveFeed() {
         }
         setFailed(false);
       } catch {
-        if (active) setFailed(true);
+        if (!active) return;
+        setFailed(true);
+        // Offline or the server is down: fall back to the last incidents saved on this device.
+        const cached = readIncidentFeed();
+        if (cached) {
+          setCachedIncidents(cached.events);
+          setIncidentCacheAt(cached.savedAt);
+        }
       }
     };
     void load();
@@ -162,7 +171,7 @@ export function LiveFeed() {
         ) : (
           <>
             <ol className="relative flex flex-col gap-3 before:absolute before:top-4 before:bottom-4 before:left-[1.85rem] before:w-px before:bg-border md:before:left-[2.1rem]">
-              {list.slice(0, shown).map((e) => <Item key={e.id} e={e} now={now} fresh={fresh.has(e.id)} />)}
+              {list.slice(0, shown).map((e) => <Item key={e.id} e={e} now={now} fresh={fresh.has(e.id)} onHide={() => setHiding(e)} />)}
             </ol>
             {list.length > shown && (
               <button onClick={() => setShown((n) => n + PAGE)} className="btn btn-secondary self-center">{t("feed.more")}</button>
@@ -170,6 +179,7 @@ export function LiveFeed() {
           </>
         )}
       </div>
+      {hiding && <HideFeedDialog event={hiding} onHidden={removeEvent} onClose={() => setHiding(null)} />}
     </section>
   );
 }
@@ -212,7 +222,7 @@ const TONE = {
   incident: { icon: TriangleAlert, tile: "bg-review-bg text-review-text" },
 } as const;
 
-function Item({ e, now, fresh }: { e: FeedEvent; now: number; fresh: boolean }) {
+function Item({ e, now, fresh, onHide }: { e: FeedEvent; now: number; fresh: boolean; onHide: () => void }) {
   const { icon: Icon, tile } = TONE[e.kind];
   const href = e.kind === "photo" ? `/review/${e.photoId}` : e.kind === "incident" ? `/units/${encodeURIComponent(e.unit.code)}` : `/units/${encodeURIComponent(e.unit.code)}?election=${e.election}`;
   const where = [e.unit.ward, e.unit.lga, e.unit.state].filter(Boolean).join(" · ");
@@ -225,7 +235,7 @@ function Item({ e, now, fresh }: { e: FeedEvent; now: number; fresh: boolean }) 
   else headline = t("feed.mismatch", { party: e.party, unit: e.unit.name });
 
   return (
-    <li className={`relative ${fresh ? "animate-pop-in" : "animate-rise"}`}>
+    <li className={`group relative ${fresh ? "animate-pop-in" : "animate-rise"}`}>
       <Link href={href} className={`card pressable flex items-center gap-3 p-3 md:gap-4 md:p-4 ${fresh ? "ring-2 ring-pop" : ""}`}>
         <span className={`relative z-10 grid size-11 shrink-0 place-items-center rounded-2xl md:size-12 ${tile}`}>
           <Icon aria-hidden className="size-5" />
@@ -262,6 +272,7 @@ function Item({ e, now, fresh }: { e: FeedEvent; now: number; fresh: boolean }) 
           <time dateTime={e.at} className="text-[11px] whitespace-nowrap text-muted">{ago(e.at, now)}</time>
         </div>
       </Link>
+      <HideButton onClick={onHide} />
     </li>
   );
 }

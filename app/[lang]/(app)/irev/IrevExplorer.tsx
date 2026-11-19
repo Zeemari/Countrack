@@ -43,17 +43,17 @@ export function IrevExplorer() {
 
   /** Setting one level clears every level below it; a new election type keeps the state. */
   function choose(patch: Partial<Sel>) {
-    setSel((prev) => {
-      const next = { ...prev, ...patch };
-      const levels = Object.keys(patch).map((k) => ORDER.indexOf(k as Key)).filter((i) => i >= 0);
-      const first = patch.election ? 0 : Math.min(...levels);
-      ORDER.forEach((k, i) => { if (i > first && !(k in patch)) next[k] = ""; });
-      const url = new URL(window.location.href);
-      url.search = new URLSearchParams(Object.entries(next).filter(([, v]) => v) as [string, string][]).toString();
-      window.history.replaceState(null, "", url);
-      return next;
-    });
+    const next = { ...sel, ...patch };
+    const levels = Object.keys(patch).map((k) => ORDER.indexOf(k as Key)).filter((i) => i >= 0);
+    const first = patch.election ? 0 : Math.min(...levels);
+    ORDER.forEach((k, i) => { if (i > first && !(k in patch)) next[k] = ""; });
+    setSel(next);
     if (!("pu" in patch)) setQuery("");
+    // Mirror the choice in the URL here in the event handler, never inside a state updater: updaters
+    // run during render, and replaceState notifies Next's router, which must not update mid-render.
+    const url = new URL(window.location.href);
+    url.search = new URLSearchParams(Object.entries(next).filter(([, v]) => v) as [string, string][]).toString();
+    window.history.replaceState(null, "", url);
   }
 
   // Presidential elections are national, so they list without a state; everything else is per state.

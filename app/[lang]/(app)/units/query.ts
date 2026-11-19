@@ -6,64 +6,92 @@ import type { Filter, UnitsPage, UnitsQuery } from "./shared";
 type Row = { id: string; code: string; name: string; ward: string; lga: string; state: string; moved: boolean; is_simulated: boolean };
 const COLUMNS = "id, code, name, ward, lga, state, moved, is_simulated";
 
+type Ids = { verified: string[]; mismatch: string[] };
+
 export async function loadUnits(query: UnitsQuery): Promise<UnitsPage> {
   const db = publicClient();
   const { election, q, state } = query;
   const pattern = q ? `%${q.replace(/[%_*,()]/g, " ")}%` : null;
+  const search = pattern ? `code.ilike.${pattern},name.ilike.${pattern},ward.ilike.${pattern},lga.ilike.${pattern}` : null;
 
-  /** One query over polling_units, narrowed to a status, the search and the state. */
-  function units(status: Filter, opts: { head?: boolean } = {}) {
-    const join =
-      status === "verified" || status === "flagged" ? ", unit_results!inner(status)"
-      : status === "pending" ? ", unit_results(status)"
-      : status === "mismatch" ? ", discrepancies!inner(id)"
-      : "";
-    let b = db.from("polling_units").select(`${COLUMNS}${join}`, { count: "exact", head: opts.head });
-    if (status === "verified" || status === "flagged") b = b.eq("unit_results.election", election).eq("unit_results.status", status);
-    // Pending = no verified or flagged result for this election (one witness, or none yet).
-    if (status === "pending") b = b.eq("unit_results.election", election).in("unit_results.status", ["verified", "flagged"]).is("unit_results", null);
-    if (status === "mismatch") b = b.eq("discrepancies.election", election);
-    if (pattern) b = b.or(`code.ilike.${pattern},name.ilike.${pattern},ward.ilike.${pattern},lga.ilike.${pattern}`);
+  /**
+   * Verified and mismatched unit ids, read from the small results and discrepancies tables rather
+   * than by scanning all ~176k polling units. Verified = a verified CounTrack result with no
+   * mismatch against the announced figures; mismatch = the announced figures disagree.
+   */
+  async function loadIds(): Promise<Ids | null> {
+    const embed = search || state ? ", polling_units!inner(id)" : "";
+    let verifiedQ = db.from("unit_results").select(`unit_id${embed}`).eq("election", election).eq("status", "verified");
+    let mismatchQ = db.from("discrepancies").select(`unit_id${embed}`).eq("election", election);
+    if (search) {
+      verifiedQ = verifiedQ.or(search, { referencedTable: "polling_units" });
+      mismatchQ = mismatchQ.or(search, { referencedTable: "polling_units" });
+    }
+    if (state) {
+      verifiedQ = verifiedQ.eq("polling_units.state", state);
+      mismatchQ = mismatchQ.eq("polling_units.state", state);
+    }
+    const [verified, mismatch] = await Promise.all([verifiedQ.range(0, 9999), mismatchQ.range(0, 9999)]);
+    if (verified.error || mismatch.error) {
+      console.error("unit tile ids failed", (verified.error ?? mismatch.error)?.message);
+      return null;
+    }
+    const idsOf = (rows: unknown) => (rows as { unit_id: string }[]).map((r) => r.unit_id);
+    const mismatched = new Set(idsOf(mismatch.data));
+    return { verified: [...new Set(idsOf(verified.data))].filter((id) => !mismatched.has(id)), mismatch: [...mismatched] };
+  }
+
+  /** Polling units narrowed to the search, the state and (optionally) a set of ids. */
+  function units(only: string[] | null, opts: { head?: boolean } = {}) {
+    let b = db.from("polling_units").select(COLUMNS, { count: "exact", head: opts.head });
+    if (only) b = b.in("id", only);
+    if (search) b = b.or(search);
     if (state) b = b.eq("state", state);
     return b;
   }
 
-  const list = (pageNo: number) =>
-    units(query.status)
-      .order("is_simulated", { ascending: false }) // demo units first: they carry results
-      .order(query.sort)
-      .order("code")
-      .range((pageNo - 1) * query.size, pageNo * query.size - 1)
-      .overrideTypes<Row[], { merge: false }>();
+  const idsReq = loadIds();
+  const statesReq = db.from("polling_unit_directory_states").select("name").order("name");
+
+  // A status filter lists exactly the ids behind its tile, so those come first (they are quick).
+  let only: string[] | null = null;
+  if (query.status !== "all") {
+    const ids = await idsReq;
+    if (!ids) throw new Error("Could not load verification results. Try again.");
+    only = ids[query.status];
+  }
+
+  type ListResult = { data: Row[] | null; count: number | null; error: { code?: string; message: string } | null };
+  const list = async (pageNo: number): Promise<ListResult> =>
+    only?.length === 0
+      ? { data: [], count: 0, error: null }
+      : units(only)
+          .order("is_simulated", { ascending: false }) // demo units first: they carry results
+          .order(query.sort)
+          .order("code")
+          .range((pageNo - 1) * query.size, pageNo * query.size - 1)
+          .overrideTypes<Row[], { merge: false }>();
 
   // With no status filter the list's own count is the "all" tile, so skip the duplicate scan.
-  const noRows = Promise.resolve({ count: null, error: null });
-  const tiles = () =>
-    Promise.all([
-      query.status === "all" ? noRows : units("all", { head: true }),
-      units("verified", { head: true }),
-      units("flagged", { head: true }),
-      units("mismatch", { head: true }),
-    ]);
-  const statesReq = db.from("polling_unit_directory_states").select("name").order("name");
+  const allReq = () => (query.status === "all" ? Promise.resolve({ count: null, error: null }) : units(null, { head: true }));
   // A text search scans every unit until the trigram indexes exist (migration 20261119000400), so
-  // the list goes first and the tile counts after, instead of all competing for the same timeout.
-  const [first, [allRes, verified, flagged, mismatch], states] = pattern
-    ? await (async () => { const l = await list(query.page); return [l, await tiles(), await statesReq] as const; })()
-    : await Promise.all([list(query.page), tiles(), statesReq]);
+  // the list goes first and the "all" count after, instead of both competing for the same timeout.
+  const [first, allRes] = pattern
+    ? await (async () => { const l = await list(query.page); return [l, await allReq()] as const; })()
+    : await Promise.all([list(query.page), allReq()]);
+  const [tileIds, states] = await Promise.all([idsReq, statesReq]);
 
   let page = first;
   let pageNo = query.page;
   // Past the last page (an old link, or the total shrank): show the last page instead.
   if (page.error?.code === "PGRST103") {
-    const n = (await units(query.status, { head: true })).count ?? 0;
+    const n = (await units(only, { head: true })).count ?? 0;
     pageNo = Math.max(1, Math.ceil(n / query.size));
     page = await list(pageNo);
   }
   if (page.error) throw new Error(page.error.message);
-  // Tile counts are a nice-to-have: a slow one shows "—" rather than failing the page.
-  const tally = (r: { count: number | null; error: unknown }) => (r.error ? null : r.count);
-  const all = query.status === "all" ? page.count : tally(allRes);
+  // The "all" count is a nice-to-have: a slow one shows "—" rather than failing the page.
+  const all = query.status === "all" ? page.count : allRes.error ? null : allRes.count;
 
   // Witness counts and mismatches for just the units on this page.
   const rows = page.data ?? [];
@@ -79,14 +107,10 @@ export async function loadUnits(query: UnitsQuery): Promise<UnitsPage> {
   const diffCount = new Map<string, number>();
   for (const d of (diffs.data ?? []) as { unit_id: string }[]) diffCount.set(d.unit_id, (diffCount.get(d.unit_id) ?? 0) + 1);
 
-  const v = tally(verified);
-  const f = tally(flagged);
   const counts: Record<Filter, number | null> = {
     all,
-    verified: v,
-    flagged: f,
-    pending: all !== null && v !== null && f !== null ? Math.max(0, all - v - f) : null,
-    mismatch: tally(mismatch),
+    verified: tileIds ? tileIds.verified.length : null,
+    mismatch: tileIds ? tileIds.mismatch.length : null,
   };
 
   return {

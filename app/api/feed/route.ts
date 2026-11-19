@@ -35,12 +35,14 @@ export async function GET(req: Request) {
     diffsQ = diffsQ.eq("election", election);
   }
 
-  const [photos, results, diffs, incidents] = await Promise.all([
+  const [photos, results, diffs, incidents, hiddenRes] = await Promise.all([
     photosQ.order("uploaded_at", { ascending: false }).limit(LIMIT).returns<PhotoRow[]>(),
     resultsQ.order("updated_at", { ascending: false }).limit(LIMIT).returns<ResultRow[]>(),
     diffsQ.order("detected_at", { ascending: false }).limit(LIMIT).returns<DiffRow[]>(),
     // This SECURITY DEFINER RPC only returns grouped, non-identifying public counts.
     adminClient().rpc("incident_feed"),
+    // Items an admin removed from the feed (server-only table).
+    adminClient().from("feed_hidden").select("event_id, hidden_at").returns<{ event_id: string; hidden_at: string }[]>(),
   ]);
   const failed = photos.error ?? results.error ?? diffs.error;
   if (failed) {
@@ -79,10 +81,14 @@ export async function GET(req: Request) {
       });
     }
   }
-  events.sort((a, b) => b.at.localeCompare(a.at));
+  // A hidden item stays hidden until it has newer activity than when it was hidden.
+  if (hiddenRes.error) console.error("feed_hidden unavailable", hiddenRes.error.message);
+  const hiddenAt = new Map((hiddenRes.data ?? []).map((h) => [h.event_id, Date.parse(h.hidden_at)]));
+  const visible = events.filter((e) => !(Date.parse(e.at) <= (hiddenAt.get(e.id) ?? -Infinity)));
+  visible.sort((a, b) => b.at.localeCompare(a.at));
   // Keep the newest general activity plus every grouped incident entry in the response,
   // so the browser can retain the incident view for offline use.
-  const activity = events.filter((event) => event.kind !== "incident").slice(0, 30);
-  const incidentEvents = events.filter((event) => event.kind === "incident");
+  const activity = visible.filter((event) => event.kind !== "incident").slice(0, 30);
+  const incidentEvents = visible.filter((event) => event.kind === "incident");
   return NextResponse.json({ events: [...activity, ...incidentEvents].sort((a, b) => b.at.localeCompare(a.at)) }, { headers: { "Cache-Control": "no-store" } });
 }
