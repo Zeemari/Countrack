@@ -270,6 +270,7 @@
   "feed.kind.verified": "Verified",
   "feed.kind.flagged": "Needs review",
   "feed.kind.mismatch": "Mismatches",
+  "feed.kind.incidents": "Incidents",
   "feed.kind.incidentReport": "Incident report",
   "feed.failed": "Couldn't load the feed. It will try again shortly.",
   "feed.empty": "Nothing here yet.",

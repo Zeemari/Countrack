@@ -57,6 +57,6 @@ export async function POST(request: Request) {
     ok: true,
     accepted: true,
     reportId: report.id,
-    reply: `SIMULATED reply: report received for ${unit.code}: ${INCIDENTS[parsed.incidentCode]}. It is unreviewed, not confirmed.`,
+    reply: `SIMULATED reply: Your response has been recorded for ${unit.code}: ${INCIDENTS[parsed.incidentCode]}. It is unverified.`,
   });
 }

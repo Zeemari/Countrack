@@ -1,8 +1,8 @@
 // CounTrack service worker: keeps the capture flow usable offline.
 // Bump VERSION on every deploy that changes the app shell.
-const VERSION = "v5";
+const VERSION = "v6";
 const CACHE = `countrack-${VERSION}`;
-const PAGES = ["/capture", "/", "/queue"];
+const PAGES = ["/capture", "/", "/queue", "/incidents"];
 const SHELL = [...PAGES, "/manifest.webmanifest", "/icons/icon-192.png"];
 // On a weak mobile signal a request can hang for a long time: give the network this long,
 // then answer from the saved copy so the app still opens.
