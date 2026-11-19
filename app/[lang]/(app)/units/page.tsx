@@ -6,6 +6,7 @@ import { Command, EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { WidePage } from "@/components/WidePage";
 import { t } from "@/lib/i18n";
+import { requestLang } from "@/lib/i18n/server";
 import { loadUnits } from "./query";
 import { parseUnitsQuery } from "./shared";
 import { UnitBrowser } from "./UnitBrowser";
@@ -46,20 +47,22 @@ function ListSkeleton() {
 
 async function UnitList({ searchParams }: Pick<PageProps<"/[lang]/units">, "searchParams">) {
   await connection(); // always live: statuses change as witnesses submit
+  const pageLang = await requestLang();
+  const translate = (key: Parameters<typeof t>[0], vars?: Record<string, string | number>) => t(key, vars, pageLang);
   const query = parseUnitsQuery(await searchParams);
   let data;
   try {
     data = await loadUnits(query);
   } catch (e) {
-    return <EmptyState icon={CircleAlert} title={t("units.error")} body={e instanceof Error ? e.message : undefined} />;
+    return <EmptyState icon={CircleAlert} title={translate("units.error")} body={e instanceof Error ? e.message : undefined} />;
   }
 
   const filtered = query.q || query.state || query.status !== "all";
   if (data.counts.all === 0 && !filtered)
     return (
-      <EmptyState icon={Database} title={t("units.empty.title")} body={t("units.empty.body")}>
+      <EmptyState icon={Database} title={translate("units.empty.title")} body={translate("units.empty.body")}>
         <Command>npm run seed</Command>
-        <p className="text-xs text-muted">{t("units.empty.hint")}</p>
+        <p className="text-xs text-muted">{translate("units.empty.hint")}</p>
       </EmptyState>
     );
 

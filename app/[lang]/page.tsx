@@ -9,6 +9,7 @@ import { DoodlePattern, SpinSticker } from "@/components/home/Sticker";
 import { UnitCompare } from "@/components/home/UnitCompare";
 import { QueueBadge } from "@/components/QueueBadge";
 import { t, type MessageKey } from "@/lib/i18n";
+import { requestLang } from "@/lib/i18n/server";
 import type { UnitStatus } from "@/lib/schemas";
 import { many } from "@/lib/rows";
 import { publicClient } from "@/lib/supabase/server";
@@ -153,6 +154,7 @@ type Row = { unit_results: { status: UnitStatus } | { status: UnitStatus }[] | n
 /** Live "x of y verified" pill pinned to the witness illustration. A unit counts once any of its elections is verified. */
 async function LiveCount() {
   await connection();
+  const pageLang = await requestLang();
   const { data } = await publicClient().from("polling_units").select("unit_results(status)").limit(5000).returns<Row[]>();
   if (!data?.length) return null;
   const v = data.filter((u) => many(u.unit_results).some((r) => r.status === "verified")).length;
@@ -165,7 +167,7 @@ async function LiveCount() {
         <span className="absolute inset-0 animate-ping rounded-full bg-pop" />
         <span className="relative size-2 rounded-full bg-brand" />
       </span>
-      {t("home.two.live", { v, n: data.length })}
+      {t("home.two.live", { v, n: data.length }, pageLang)}
     </Link>
   );
 }

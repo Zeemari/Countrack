@@ -101,7 +101,15 @@ export type CheckMeta = {
 
 // ── Consensus ──────────────────────────────────────────────────────────
 export type UnitStatus = "pending" | "verified" | "flagged";
-export type Reading = { userId: string; result: ExtractedResult; flags: CheckFlag[] };
+export type Reading = {
+  userId: string;
+  result: ExtractedResult;
+  flags: CheckFlag[];
+  /** Trusted server upload time, never the device's capture clock. */
+  submittedAt?: string;
+  /** True only when the server confirms a legible EC8A with reliable extraction. */
+  clearEc8?: boolean;
+};
 export type Consensus = {
   status: UnitStatus;
   agreed: ExtractedResult | null;

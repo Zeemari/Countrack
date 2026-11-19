@@ -1,14 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, RefreshCw, Send, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Radio, RefreshCw, Send } from "lucide-react";
 
 type Report = {
   id: string;
   incident_code: string;
   incident_label: string;
   source: "demo" | "at_sandbox";
-  status: string;
   received_at: string;
   polling_units: { code: string; name: string; ward: string; lga: string; state: string } | null;
 };
@@ -132,7 +131,7 @@ export function IncidentSandbox() {
               </div>
               <div className="flex shrink-0 items-center gap-2 text-xs">
                 <span className="rounded-full bg-sim-bg px-2.5 py-1 font-bold text-sim-text">{report.source === "demo" ? "SIMULATED" : "AT SANDBOX"}</span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-pending-bg px-2.5 py-1 text-pending-text"><ShieldCheck aria-hidden className="size-3.5" />{report.status}</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-review-bg px-2.5 py-1 font-bold uppercase text-review-text"><Radio aria-hidden className="size-3.5" />Public report</span>
                 <time className="text-muted">{new Date(report.received_at).toLocaleTimeString()}</time>
               </div>
             </li>)}

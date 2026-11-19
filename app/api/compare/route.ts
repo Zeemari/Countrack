@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { diffScores } from "@/lib/rules/diff";
 import { CompareQuery, ExtractedResult, PartyScores } from "@/lib/schemas";
+import { recomputeUnit } from "@/lib/server/recompute";
 import { publicClient } from "@/lib/supabase/server";
 
 /**
@@ -16,6 +17,13 @@ export async function GET(req: Request) {
   const db = publicClient();
   const { data: unit } = await db.from("polling_units").select("id, code, name, ward, lga, state").eq("code", code).maybeSingle();
   if (!unit) return NextResponse.json({ error: "Polling unit not found" }, { status: 404 });
+
+  try {
+    await recomputeUnit(unit.id, election);
+  } catch (error) {
+    console.error("comparison refresh failed", error);
+    return NextResponse.json({ error: "Comparison is unavailable right now" }, { status: 503 });
+  }
 
   const [res, col] = await Promise.all([
     db.from("unit_results").select("status, witness_count, agreed_scores").eq("unit_id", unit.id).eq("election", election).maybeSingle(),

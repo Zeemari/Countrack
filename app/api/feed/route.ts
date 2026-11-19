@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Election } from "@/lib/elections";
 import type { FeedEvent, FeedUnit } from "@/lib/feed";
 import { adminClient } from "@/lib/supabase/admin";
+import { recomputeMaturedUnits } from "@/lib/server/recompute";
 import { publicClient } from "@/lib/supabase/server";
 
 const LIMIT = 15;
@@ -15,6 +16,11 @@ type IncidentFeedRow = { unit_id: string; incident_code: "VUB" | "VIO" | "MSB" |
 
 /** Latest public activity across all units: photos sealed, units verified or needing review, mismatches. */
 export async function GET(req: Request) {
+  try {
+    await recomputeMaturedUnits();
+  } catch (error) {
+    console.error("matured result refresh failed", error);
+  }
   const raw = new URL(req.url).searchParams.get("election");
   const election = raw && raw !== "all" ? Election.safeParse(raw).data : undefined;
   if (raw && raw !== "all" && !election) return NextResponse.json({ error: "Unknown election" }, { status: 400 });

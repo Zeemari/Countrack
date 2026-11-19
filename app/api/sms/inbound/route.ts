@@ -113,8 +113,8 @@ export async function POST(request: Request) {
       }
       if (!reportId) return NextResponse.json({ error: "Could not confirm saved incident" }, { status: 503 });
       reply = duplicate
-        ? "Your response was already recorded. It is unverified."
-        : `Your response has been recorded for ${unit.code}: ${INCIDENTS[parsed.incidentCode]}. It is unverified.`;
+        ? "Your response was already recorded."
+        : `Your response has been recorded for ${unit.code}: ${INCIDENTS[parsed.incidentCode]}.`;
     }
   }
 

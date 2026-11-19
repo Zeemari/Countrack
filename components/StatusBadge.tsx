@@ -20,17 +20,13 @@ export function StatusBadge({ status, size = "md" }: { status: UnitStatus; size?
   );
 }
 
-/** "n of 2 witnesses" as a two-segment meter. */
+/** Shows how many distinct witness accounts have submitted reports for this unit. */
 export function WitnessMeter({ count, status }: { count: number; status: UnitStatus }) {
   const fill = status === "verified" ? "bg-brand" : status === "flagged" ? "bg-accent" : "bg-brand/60";
   const label = status === "verified" ? t("status.verified.detail", { n: count }) : t("unit.progress", { n: count });
   return (
     <div className="flex items-center gap-2">
-      <div aria-hidden className="flex gap-1">
-        {[0, 1].map((i) => (
-          <span key={i} className={`h-1.5 w-7 rounded-full ${i < count ? fill : "bg-surface-2"}`} />
-        ))}
-      </div>
+      <span aria-hidden className={`h-1.5 w-7 rounded-full ${count > 0 ? fill : "bg-surface-2"}`} />
       <span className="text-xs text-muted">{label}</span>
     </div>
   );
