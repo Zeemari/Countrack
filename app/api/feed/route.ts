@@ -34,7 +34,7 @@ export async function GET(req: Request) {
     resultsQ.order("updated_at", { ascending: false }).limit(LIMIT).returns<ResultRow[]>(),
     diffsQ.order("detected_at", { ascending: false }).limit(LIMIT).returns<DiffRow[]>(),
     // This SECURITY DEFINER RPC only returns grouped, non-identifying public counts.
-    adminClient().rpc("incident_feed").returns<IncidentFeedRow[]>(),
+    adminClient().rpc("incident_feed"),
   ]);
   const failed = photos.error ?? results.error ?? diffs.error;
   if (failed) {
@@ -59,7 +59,7 @@ export async function GET(req: Request) {
     // Keep the result activity feed working if the incident aggregation migration is not applied yet.
     console.error("incident feed unavailable", incidents.error.message);
   } else {
-    for (const incident of incidents.data ?? []) {
+    for (const incident of (incidents.data ?? []) as IncidentFeedRow[]) {
       events.push({
         kind: "incident",
         id: `i-${incident.unit_id}-${incident.incident_code}`,

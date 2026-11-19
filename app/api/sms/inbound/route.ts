@@ -96,7 +96,7 @@ export async function POST(request: Request) {
         sender_fingerprint: senderFingerprint(from),
       };
       const { data: inserted, error: insertError } = await db
-        .from("incident_reports")
+        .from("sms_incident_reports")
         .upsert(row, { onConflict: "provider_message_id", ignoreDuplicates: true })
         .select("id")
         .maybeSingle();
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       }
       reportId = inserted?.id ?? null;
       if (!reportId && incoming.id) {
-        const { data: existing } = await db.from("incident_reports").select("id").eq("provider_message_id", incoming.id).maybeSingle();
+        const { data: existing } = await db.from("sms_incident_reports").select("id").eq("provider_message_id", incoming.id).maybeSingle();
         reportId = existing?.id ?? null;
         duplicate = Boolean(existing);
       }
