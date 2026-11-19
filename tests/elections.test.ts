@@ -5,7 +5,8 @@ import { CollationInput } from "@/lib/schemas";
 describe("elections", () => {
   it("parses known elections and falls back to presidential", () => {
     expect(parseElection("governorship")).toBe("governorship");
-    expect(parseElection("local_government")).toBe("local_government");
+    expect(parseElection("house_of_reps")).toBe("house_of_reps");
+    expect(parseElection("local_government")).toBe("chairmanship"); // legacy value
     expect(parseElection("mayor")).toBe("presidential");
     expect(parseElection(undefined)).toBe("presidential");
     expect(parseElection(["senatorial"])).toBe("presidential");

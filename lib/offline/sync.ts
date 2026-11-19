@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sha256Hex } from "../hash";
 import { t } from "../i18n";
-import { DEFAULT_ELECTION } from "../elections";
+import { parseElection } from "../elections";
 import { browserClient, ensureSession } from "../supabase/browser";
 import type { QueuedCapture } from "../schemas";
 import { isNetworkError, RETAKE_STATUS, RETRYABLE_STATUS } from "../network";
@@ -121,7 +121,7 @@ async function upload(supabase: SupabaseClient, userId: string, item: QueuedCapt
     .insert({
       unit_id: item.unitId,
       user_id: userId,
-      election: item.election ?? DEFAULT_ELECTION,
+      election: parseElection(item.election), // maps legacy "local_government"
       image_url: path,
       sha256_hash: item.sha256,
       captured_at: item.capturedAt,

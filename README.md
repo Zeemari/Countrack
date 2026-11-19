@@ -45,6 +45,31 @@ To import real directory data:
 
 The importer resolves the selected GitHub ref to a commit, validates the source manifest, row count, full codes, and duplicates, then upserts in batches. It marks older imported snapshots inactive only after the new snapshot has fully imported. By default it uses the source repo's `main` branch; set `INEC_DATASET_REF` to a 40-character commit SHA for a repeatable import. The source is the community-maintained [`nigeria-inec-geo`](https://github.com/saidiadegoke/nigeria-inec-geo) snapshot of INEC's public CVR directory; check records against INEC before relying on them. This import contains names and administrative locations, not verified directions or coordinates.
 
+## Elections
+
+CounTrack tracks the seven election types INEC lists on IReV: presidential, governorship, senatorial, House of Representatives (`house_of_reps`), State House of Assembly (`state_assembly`), chairmanship and councillorship. Apply `supabase/migrations/20261119000300_all_elections.sql` in the SQL Editor **on its own** (new enum values must commit before they're used). It renames the old `local_government` value to `chairmanship`; old links and queued captures that say `local_government` are read as chairmanship.
+
+## Polling units page
+
+`/units` searches, filters, counts and pages the whole directory (~176k units) in the database. Apply `supabase/migrations/20261119000400_polling_unit_search.sql` for fast search: without its trigram indexes every search scans the table (several seconds).
+
+## IReV API
+
+INEC's Result Viewing portal ([inecelectionresults.ng](https://www.inecelectionresults.ng)) has no public API. Its web app reads a JSON backend one click at a time (election type → election → state → LGA → ward → polling unit). `GET /api/irev` wraps that backend so you can jump to any level directly:
+
+| Query | Returns |
+|---|---|
+| `?level=states` | The 37 states with their INEC code and IReV id (they differ: FCT is code `37`, IReV id `15`) |
+| `?level=elections&election=governorship&state=24[&date=2023-03-18]` | Elections of that type, newest first. `date` accepts `YYYY`, `YYYY-MM` or `YYYY-MM-DD`. Presidential needs no state |
+| `?level=lgas&electionId=…&state=24` | LGAs in that state for the election |
+| `?level=wards&electionId=…&lga=…` | Wards in the LGA |
+| `?level=units&electionId=…&ward=…` | Polling units, each with `code` (matches CounTrack's), `documentUrl` (the uploaded EC8A) and `uploadedAt` |
+| `?level=unit&electionId=…&pu=…` | One polling unit |
+
+`GET /api/irev/sheet?electionId=…&pu=…[&download=1]` streams that unit's result sheet image/PDF through CounTrack (only from INEC's storage hosts, only image/PDF types). The `/irev` page uses all of this: pick type, state, election date, LGA, ward and polling unit, and see the IReV sheet beside CounTrack's witness-verified result.
+
+Structure (types, elections, LGAs, wards) is cached for hours and uploads for minutes. If INEC moves the backend, set `IREV_API_BASE` (the current address is in the portal's `main.*.js` bundle). The mapping from IReV's JSON lives in `lib/irev/map.ts` and is covered by `tests/irev.test.ts`.
+
 ## How the core flow works
 
 1. **Capture** (`/capture`): photo → compressed JPEG (EXIF stripped) → SHA-256 on the phone → saved to IndexedDB.

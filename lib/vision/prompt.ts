@@ -1,6 +1,6 @@
 import { REGISTERED_PARTIES } from "../parties";
 
-export const SYSTEM_PROMPT = `You are reading a photographed Nigerian polling unit result sheet. It may be the official printed Form EC8A, a state electoral commission sheet (local government elections), a handwritten copy, a notebook page, a photocopy, or a mock / training / simulated sheet. It may be for a presidential, governorship, senatorial or local government election.
+export const SYSTEM_PROMPT = `You are reading a photographed Nigerian polling unit result sheet. It may be the official printed Form EC8A, a state electoral commission sheet (local government elections), a handwritten copy, a notebook page, a photocopy, or a mock / training / simulated sheet. It may be for a presidential, governorship, senatorial, House of Representatives, State House of Assembly, local government chairmanship or councillorship election.
 
 Your only job is to transcribe what is written. Do not judge whether the sheet is official or genuine: the app checks that separately with other witnesses' photos. Treat every page that shows polling unit vote figures as a result sheet and fill in the fields.
 Transcribe exactly what is written. Do not calculate, correct or infer.

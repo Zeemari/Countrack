@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import type { Election } from "../elections";
+import { ELECTION_WORDS, type Election } from "../elections";
 import { VisionExtraction } from "../schemas";
 import { SYSTEM_PROMPT } from "./prompt";
 
@@ -64,7 +64,7 @@ export async function extractFromImage(jpegBase64: string, election: Election): 
       role: "user",
       content: [
         { type: "image_url", image_url: { url: `data:image/jpeg;base64,${jpegBase64}` } },
-        { type: "text", text: `Read this result sheet. The witness filed it under the ${election.replace("_", " ")} election.` },
+        { type: "text", text: `Read this result sheet. The witness filed it under the ${ELECTION_WORDS[election]} election.` },
       ],
     },
   ];

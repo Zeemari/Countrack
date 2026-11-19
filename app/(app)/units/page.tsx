@@ -1,19 +1,29 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { connection } from "next/server";
-import { CircleAlert, Database } from "lucide-react";
+import { CircleAlert, Database, ScanSearch } from "lucide-react";
 import { Command, EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { parseElection, type Election } from "@/lib/elections";
+import { WidePage } from "@/components/WidePage";
 import { t } from "@/lib/i18n";
-import { many } from "@/lib/rows";
-import { publicClient } from "@/lib/supabase/server";
-import type { UnitStatus } from "@/lib/schemas";
-import { UnitBrowser, type UnitCardData } from "./UnitBrowser";
+import { loadUnits } from "./query";
+import { parseUnitsQuery } from "./shared";
+import { UnitBrowser } from "./UnitBrowser";
 
 export default function UnitsPage({ searchParams }: PageProps<"/units">) {
   return (
     <>
-      <PageHeader title={t("units.title")} subtitle={t("units.subtitle")} />
+      <WidePage />
+      <PageHeader
+        eyebrow={t("units.eyebrow")}
+        title={t("units.title")}
+        subtitle={t("units.subtitle")}
+        action={
+          <Link href="/irev" className="btn btn-secondary min-h-11 shrink-0 self-start px-4 text-sm md:self-auto">
+            <ScanSearch aria-hidden className="size-4" /> {t("units.irevAction")}
+          </Link>
+        }
+      />
       {/* Live data: rendered per request, streamed in behind this fallback. */}
       <Suspense fallback={<ListSkeleton />}>
         <UnitList searchParams={searchParams} />
@@ -24,38 +34,28 @@ export default function UnitsPage({ searchParams }: PageProps<"/units">) {
 
 function ListSkeleton() {
   return (
-    <div className="flex flex-col gap-3" aria-label={t("units.loading")}>
-      <div className="h-13 animate-pulse rounded-2xl bg-surface-2" />
-      <div className="flex flex-col gap-3">{[0, 1, 2, 3].map((i) => <div key={i} className="card h-36 animate-pulse" />)}</div>
+    <div className="flex flex-col gap-6" aria-label={t("units.loading")}>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {[0, 1, 2, 3, 4].map((i) => <div key={i} className={`h-28 animate-pulse rounded-2xl bg-surface-2 ${i ? "" : "col-span-2 sm:col-span-1"}`} />)}
+      </div>
+      <div className="h-32 animate-pulse rounded-3xl bg-surface-2" />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="card h-44 animate-pulse" />)}</div>
     </div>
   );
 }
 
-type Row = {
-  id: string;
-  code: string;
-  name: string;
-  ward: string;
-  lga: string;
-  moved: boolean;
-  unit_results: { status: UnitStatus; witness_count: number } | { status: UnitStatus; witness_count: number }[] | null;
-  discrepancies: { count: number }[];
-};
-
 async function UnitList({ searchParams }: Pick<PageProps<"/units">, "searchParams">) {
   await connection(); // always live: statuses change as witnesses submit
-  const election: Election = parseElection((await searchParams).election);
-  const { data, error } = await publicClient()
-    .from("polling_units")
-    .select("id, code, name, ward, lga, moved, unit_results(status, witness_count), discrepancies(count)")
-    .eq("unit_results.election", election)
-    .eq("discrepancies.election", election)
-    .order("code")
-    .limit(1000)
-    .returns<Row[]>();
+  const query = parseUnitsQuery(await searchParams);
+  let data;
+  try {
+    data = await loadUnits(query);
+  } catch (e) {
+    return <EmptyState icon={CircleAlert} title={t("units.error")} body={e instanceof Error ? e.message : undefined} />;
+  }
 
-  if (error) return <EmptyState icon={CircleAlert} title={t("units.error")} body={error.message} />;
-  if (!data.length)
+  const filtered = query.q || query.state || query.status !== "all";
+  if (data.counts.all === 0 && !filtered)
     return (
       <EmptyState icon={Database} title={t("units.empty.title")} body={t("units.empty.body")}>
         <Command>npm run seed</Command>
@@ -63,23 +63,6 @@ async function UnitList({ searchParams }: Pick<PageProps<"/units">, "searchParam
       </EmptyState>
     );
 
-  const units: UnitCardData[] = data.map((u) => {
-    const result = many(u.unit_results)[0];
-    return {
-      id: u.id,
-      code: u.code,
-      name: u.name,
-      ward: u.ward,
-      lga: u.lga,
-      moved: u.moved,
-      status: result?.status ?? "pending",
-      witnesses: result?.witness_count ?? 0,
-      mismatches: u.discrepancies[0]?.count ?? 0,
-    };
-  });
-  return (
-    <Suspense>
-      <UnitBrowser units={units} election={election} />
-    </Suspense>
-  );
+  // Keyed by the query so client state (search box, page) resets when the URL changes elsewhere.
+  return <UnitBrowser key={JSON.stringify({ ...query, q: "" })} query={query} {...data} />;
 }

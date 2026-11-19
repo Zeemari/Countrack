@@ -1,4 +1,4 @@
-import { Camera, ClipboardPen, CloudUpload, House, MapPin, type LucideIcon } from "lucide-react";
+import { Camera, ClipboardPen, CloudUpload, House, MapPin, ScanSearch, type LucideIcon } from "lucide-react";
 import { t } from "@/lib/i18n";
 
 export type NavItem = { href: string; short: string; long: string; icon: LucideIcon; match: (p: string) => boolean };
@@ -11,5 +11,6 @@ export const NAV = {
     href: "/queue", short: t("nav.queue"), long: t("nav.queue.long"), icon: CloudUpload,
     match: (p) => p.startsWith("/queue") || p.startsWith("/review"),
   },
+  irev: { href: "/irev", short: t("nav.irev"), long: t("nav.irev.long"), icon: ScanSearch, match: (p) => p.startsWith("/irev") },
   collate: { href: "/collation", short: t("nav.collate"), long: t("nav.collate.long"), icon: ClipboardPen, match: (p) => p.startsWith("/collation") },
 } satisfies Record<string, NavItem>;
