@@ -1,17 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Camera } from "lucide-react";
 import { NAV } from "@/components/nav-items";
 import { t } from "@/lib/i18n";
+import { useAppPath } from "@/lib/i18n/path";
 import { useCaptures } from "@/lib/offline/hooks";
 
 const LINKS = [NAV.units, NAV.irev, NAV.incidents, NAV.queue, NAV.collate];
 
 /** Plain text links for wider screens; phones use the bottom bar instead. */
 export function HeaderNav() {
-  const path = usePathname();
+  const path = useAppPath();
   const pending = useCaptures()?.filter((c) => c.status !== "done").length ?? 0;
   return (
     <nav aria-label={t("nav.main")} className="hidden items-center gap-1 md:flex">
@@ -26,7 +26,7 @@ export function HeaderNav() {
               active ? "bg-frame-ink/12 text-frame-ink" : "text-frame-muted hover:text-frame-ink"
             }`}
           >
-            {item.short}
+            {t(item.short)}
             {item === NAV.queue && pending > 0 && (
               <span className="ml-1.5 rounded-full bg-accent px-1.5 text-[10px] font-bold text-black">{pending}</span>
             )}
