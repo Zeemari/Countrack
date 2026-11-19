@@ -93,7 +93,7 @@ async function main() {
   const parsed = parseCsv(csv);
   const [headers, ...records] = parsed;
   const columns = Object.fromEntries(headers.map((name, index) => [name, index]));
-  const required = ["state_name", "lga_name", "ward_name", "pu_code", "pu_name", "pu_location", "full_code"];
+  const required = ["state_code", "state_name", "lga_code", "lga_name", "ward_code", "ward_name", "pu_code", "pu_name", "pu_location", "full_code"];
   for (const field of required) {
     if (columns[field] === undefined) throw new Error(`Dataset is missing the ${field} column`);
   }
@@ -102,12 +102,32 @@ async function main() {
   }
 
   const seen = new Set<string>();
+  const states = new Map<string, { code: string; name: string; directory_snapshot: string; directory_is_current: boolean }>();
+  const lgas = new Map<string, { state_code: string; code: string; name: string; state_name: string; directory_snapshot: string; directory_is_current: boolean }>();
+  const wards = new Map<string, { state_code: string; lga_code: string; code: string; name: string; state_name: string; lga_name: string; directory_snapshot: string; directory_is_current: boolean }>();
+  const snapshot = `${commit}:${manifest.scraped_at}`;
   const rows = records.map((record) => {
     const value = (field: string) => record[columns[field]]?.trim() ?? "";
     const code = value("full_code");
     if (!/^\d{2}\/\d{2}\/\d{2}\/\d{3}$/.test(code)) throw new Error(`Invalid INEC polling-unit code: ${code}`);
     if (seen.has(code)) throw new Error(`Duplicate INEC polling-unit code: ${code}`);
     seen.add(code);
+
+    const stateCode = value("state_code");
+    const stateName = value("state_name");
+    const lgaCode = value("lga_code");
+    const lgaName = value("lga_name");
+    const wardCode = value("ward_code");
+    const wardName = value("ward_name");
+    states.set(stateCode, { code: stateCode, name: stateName, directory_snapshot: snapshot, directory_is_current: true });
+    lgas.set(`${stateCode}/${lgaCode}`, {
+      state_code: stateCode, code: lgaCode, name: lgaName, state_name: stateName,
+      directory_snapshot: snapshot, directory_is_current: true,
+    });
+    wards.set(`${stateCode}/${lgaCode}/${wardCode}`, {
+      state_code: stateCode, lga_code: lgaCode, code: wardCode, name: wardName,
+      state_name: stateName, lga_name: lgaName, directory_snapshot: snapshot, directory_is_current: true,
+    });
 
     return {
       code,
@@ -118,12 +138,25 @@ async function main() {
       state: value("state_name"),
       is_simulated: false,
       directory_source: "INEC CVR portal via nigeria-inec-geo",
-      directory_snapshot: `${commit}:${manifest.scraped_at}`,
+      directory_snapshot: snapshot,
       directory_is_current: true,
     };
   });
 
   const batchSize = 500;
+  for (let start = 0; start < states.size; start += batchSize) {
+    const { error } = await db.from("polling_unit_directory_states").upsert([...states.values()].slice(start, start + batchSize));
+    if (error) throw new Error(`State directory import failed: ${error.message}`);
+  }
+  for (let start = 0; start < lgas.size; start += batchSize) {
+    const { error } = await db.from("polling_unit_directory_lgas").upsert([...lgas.values()].slice(start, start + batchSize));
+    if (error) throw new Error(`LGA directory import failed: ${error.message}`);
+  }
+  for (let start = 0; start < wards.size; start += batchSize) {
+    const { error } = await db.from("polling_unit_directory_wards").upsert([...wards.values()].slice(start, start + batchSize));
+    if (error) throw new Error(`Ward directory import failed: ${error.message}`);
+  }
+
   for (let start = 0; start < rows.length; start += batchSize) {
     const { error } = await db.from("polling_units").upsert(rows.slice(start, start + batchSize), { onConflict: "code" });
     if (error) throw new Error(`Import stopped at row ${start}: ${error.message}`);
@@ -137,8 +170,17 @@ async function main() {
     .from("polling_units")
     .update({ directory_is_current: false })
     .eq("is_simulated", false)
-    .neq("directory_snapshot", `${commit}:${manifest.scraped_at}`);
+    .neq("directory_snapshot", snapshot);
   if (error) throw new Error(`Imported the snapshot, but could not retire stale rows: ${error.message}`);
+
+  const [wardRetire, lgaRetire, stateRetire] = await Promise.all([
+    db.from("polling_unit_directory_wards").update({ directory_is_current: false }).neq("directory_snapshot", snapshot),
+    db.from("polling_unit_directory_lgas").update({ directory_is_current: false }).neq("directory_snapshot", snapshot),
+    db.from("polling_unit_directory_states").update({ directory_is_current: false }).neq("directory_snapshot", snapshot),
+  ]);
+  if (wardRetire.error || lgaRetire.error || stateRetire.error) {
+    throw new Error("Imported the snapshot, but could not retire stale hierarchy options");
+  }
 
   console.log(`Imported ${rows.length} INEC polling units from ${manifest.source} (${manifest.scraped_at}; ${commit}).`);
 }

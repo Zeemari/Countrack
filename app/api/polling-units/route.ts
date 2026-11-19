@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
 const SOURCE = "INEC CVR portal via the community-maintained nigeria-inec-geo snapshot";
 const SOURCE_TAG = "INEC CVR portal via nigeria-inec-geo";
 const CODE = /^\d{2}\/\d{2}\/\d{2}\/\d{3}$/;
-const SAFE_FILTER = /^[\p{L}\p{N} /-]+$/u;
+const SAFE_FILTER = /^[\p{L}\p{N} .,'’&()/-]+$/u;
+const SAFE_SEARCH = /^[\p{L}\p{N} /-]+$/u;
 
 function normalizeCode(input: string): string | null {
   const compact = input.trim().replace(/\s/g, "");
@@ -31,15 +32,19 @@ function safeFilter(value: string | null, name: string): string | null | Respons
 /** Public real-world directory API. Supports exact PVC PU code lookup and paginated text search. */
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
+  const level = params.get("level");
   const rawCode = params.get("code");
   const query = params.get("q")?.trim() ?? "";
+  if (level && !["states", "lgas", "wards", "units"].includes(level)) {
+    return NextResponse.json({ error: "level must be states, lgas, wards, or units" }, { status: 400 });
+  }
   if (rawCode && query) return NextResponse.json({ error: "Use either code or q, not both" }, { status: 400 });
 
   const code = rawCode ? normalizeCode(rawCode) : null;
   if (rawCode && !code) {
     return NextResponse.json({ error: "Send the full PU code, for example 01/02/03/004 or its 8–9 digit form" }, { status: 400 });
   }
-  if (query.length > 80 || (query && !SAFE_FILTER.test(query))) {
+  if (query.length > 80 || (query && !SAFE_SEARCH.test(query))) {
     return NextResponse.json({ error: "Invalid search query" }, { status: 400 });
   }
 
@@ -48,10 +53,46 @@ export async function GET(request: Request) {
   const ward = safeFilter(params.get("ward"), "ward");
   for (const result of [state, lga, ward]) if (result instanceof Response) return result;
 
-  const limitRaw = Number(params.get("limit") ?? 20);
+  if (level && level !== "units") {
+    if (rawCode || query || params.has("limit") || params.has("offset")) {
+      return NextResponse.json({ error: "Hierarchy levels do not accept code, q, limit, or offset" }, { status: 400 });
+    }
+    if (level !== "states" && typeof state !== "string") {
+      return NextResponse.json({ error: "state is required for this level" }, { status: 400 });
+    }
+    if (level === "wards" && typeof lga !== "string") {
+      return NextResponse.json({ error: "lga is required for the wards level" }, { status: 400 });
+    }
+
+    const client = publicClient();
+    let optionsQuery;
+    if (level === "states") {
+      optionsQuery = client.from("polling_unit_directory_states").select("code, name", { count: "exact" }).order("name");
+    } else if (level === "lgas") {
+      optionsQuery = client.from("polling_unit_directory_lgas").select("code, name", { count: "exact" }).eq("state_name", state).order("name");
+    } else {
+      optionsQuery = client.from("polling_unit_directory_wards").select("code, name", { count: "exact" }).eq("state_name", state).eq("lga_name", lga).order("name");
+    }
+    const { data: options, count: optionCount, error: optionsError } = await optionsQuery;
+    if (optionsError) {
+      console.error("polling unit hierarchy lookup failed", optionsError.message);
+      return NextResponse.json({ error: "Polling unit directory is temporarily unavailable" }, { status: 503 });
+    }
+    return NextResponse.json({ data: options, pagination: { total: optionCount ?? 0 }, source: SOURCE });
+  }
+
+  if (level === "units" && (typeof state !== "string" || typeof lga !== "string" || typeof ward !== "string")) {
+    return NextResponse.json({ error: "state, lga, and ward are required for the units level" }, { status: 400 });
+  }
+  if (level === "units" && (rawCode || query || params.has("offset"))) {
+    return NextResponse.json({ error: "The units level uses state, lga, ward, and optional limit filters only" }, { status: 400 });
+  }
+
+  const maxLimit = level === "units" ? 500 : 100;
+  const limitRaw = Number(params.get("limit") ?? (level === "units" ? 500 : 20));
   const offsetRaw = Number(params.get("offset") ?? 0);
-  if (!Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > 100 || !Number.isInteger(offsetRaw) || offsetRaw < 0 || offsetRaw > 1_000_000) {
-    return NextResponse.json({ error: "limit must be 1–100 and offset must be a non-negative integer" }, { status: 400 });
+  if (!Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > maxLimit || !Number.isInteger(offsetRaw) || offsetRaw < 0 || offsetRaw > 1_000_000) {
+    return NextResponse.json({ error: `limit must be 1–${maxLimit} and offset must be a non-negative integer` }, { status: 400 });
   }
 
   let queryBuilder = publicClient()

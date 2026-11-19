@@ -35,7 +35,7 @@ don't match the wall.
 
 ## Polling unit directory API
 
-`GET /api/polling-units` serves real directory records from Supabase. Search with `?code=01/02/03/004` for a full PVC polling-unit code, or use `?q=market&state=Lagos&limit=20&offset=0` for paginated text search. Responses include the dataset source and snapshot identifier. Simulated `SIM-*` demo units are excluded from this API and remain available in the existing demo experience.
+`GET /api/polling-units` serves real directory records from Supabase. Search with `?code=01/02/03/004` for a full PVC polling-unit code, or use `?q=market&state=Lagos&limit=20&offset=0` for paginated text search. The capture form loads its State → LGA → Ward → Polling unit options from `?level=states`, `?level=lgas&state=Lagos`, `?level=wards&state=Lagos&lga=Ikeja`, and `?level=units&state=Lagos&lga=Ikeja&ward=...`. Responses include dataset provenance. Simulated `SIM-*` demo units are excluded from the real directory API and remain available in the existing demo experience.
 
 To import real directory data:
 
