@@ -37,13 +37,13 @@ export async function POST(request: Request) {
   const senderFingerprint = secret ? createHmac("sha256", secret).update(from).digest("hex") : null;
   if (senderFingerprint) {
     const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const { count, error } = await db.from("incident_reports").select("id", { count: "exact", head: true })
+    const { count, error } = await db.from("sms_incident_reports").select("id", { count: "exact", head: true })
       .eq("sender_fingerprint", senderFingerprint).eq("source", "demo").gte("received_at", since);
     if (error) return NextResponse.json({ error: "Rate limit check unavailable" }, { status: 503 });
     if ((count ?? 0) >= 10) return NextResponse.json({ error: "Demo limit reached for this sender. Try again later." }, { status: 429 });
   }
 
-  const { data: report, error: insertError } = await db.from("incident_reports").insert({
+  const { data: report, error: insertError } = await db.from("sms_incident_reports").insert({
     unit_id: unit.id,
     incident_code: parsed.incidentCode,
     source: "demo",
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   }).select("id").single();
   if (insertError) {
     console.error("Demo incident insert failed", insertError.message);
-    return NextResponse.json({ error: "Could not save incident report. Apply the incident_reports migration first." }, { status: 503 });
+    return NextResponse.json({ error: "Could not save incident report. Apply the sms_incident_reports migration first." }, { status: 503 });
   }
   return NextResponse.json({
     ok: true,
