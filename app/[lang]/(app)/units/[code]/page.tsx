@@ -23,7 +23,7 @@ import { ExtractedResult, PartyScores, type UnitStatus } from "@/lib/schemas";
 import { many } from "@/lib/rows";
 import { publicClient } from "@/lib/supabase/server";
 
-export default function UnitPage({ params, searchParams }: PageProps<"/units/[code]">) {
+export default function UnitPage({ params, searchParams }: PageProps<"/[lang]/units/[code]">) {
   return (
     <>
       <BackLink href="/units" label={t("units.title")} />
@@ -56,7 +56,7 @@ type UnitRow = {
   collation_results: { id: string; level: string; party_scores: unknown; source: string; announced_at: string; is_simulated: boolean }[];
 };
 
-async function Unit({ params, searchParams }: Pick<PageProps<"/units/[code]">, "params" | "searchParams">) {
+async function Unit({ params, searchParams }: Pick<PageProps<"/[lang]/units/[code]">, "params" | "searchParams">) {
   await connection();
   const { code } = await params;
   const election = parseElection((await searchParams).election);

@@ -16,7 +16,7 @@ import { t } from "@/lib/i18n";
 import { CheckFlags, type UnitStatus } from "@/lib/schemas";
 import { publicClient } from "@/lib/supabase/server";
 
-export default function ReviewPage({ params }: PageProps<"/review/[photoId]">) {
+export default function ReviewPage({ params }: PageProps<"/[lang]/review/[photoId]">) {
   return (
     <>
       <BackLink href="/queue" label={t("queue.title")} />
@@ -41,7 +41,7 @@ type PhotoRow = {
   extracted_results: Record<string, unknown> | null;
 };
 
-async function Review({ params }: Pick<PageProps<"/review/[photoId]">, "params">) {
+async function Review({ params }: Pick<PageProps<"/[lang]/review/[photoId]">, "params">) {
   await connection();
   const { photoId } = await params;
   const db = publicClient();

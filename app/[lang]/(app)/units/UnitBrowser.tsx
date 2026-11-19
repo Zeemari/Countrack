@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUpRight, ChevronDown, CircleCheck, Clock, LayoutGrid, List, Loader2, MapPin, Rows3, Scale, Search, SearchX, TriangleAlert,
   Truck, X, type LucideIcon,
@@ -12,6 +12,7 @@ import { Pagination } from "@/components/Pagination";
 import { StatusBadge, WitnessMeter } from "@/components/StatusBadge";
 import { electionLinks, type Election } from "@/lib/elections";
 import { t, type MessageKey } from "@/lib/i18n";
+import { useAppPath } from "@/lib/i18n/path";
 import { PAGE_SIZES, SORTS, type Filter, type UnitCardData, type UnitsPage, type UnitsQuery } from "./shared";
 
 export type { UnitCardData };
@@ -45,7 +46,7 @@ function hrefFor(query: UnitsQuery, path: string, view: View) {
 export function UnitBrowser({ query: asked, units, total, page, counts, states }: UnitsPage & { query: UnitsQuery }) {
   const query = { ...asked, page };
   const router = useRouter();
-  const path = usePathname();
+  const path = useAppPath();
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState(query.q);
   // Layout lives in the URL (not sent to the server) so a shared link opens the same way.
