@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { LogOut } from "lucide-react";
 import { signOut } from "@/app/(app)/login/actions";
 import { t } from "@/lib/i18n";
@@ -6,6 +7,7 @@ import { userClient } from "@/lib/supabase/server";
 
 /** Who is signed in (header), with sign-out. Dynamic: render inside <Suspense>. */
 export async function UserChip() {
+  await connection();
   const supabase = await userClient();
   const { data: { user } } = await supabase.auth.getUser();
 
