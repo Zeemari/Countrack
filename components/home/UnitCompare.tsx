@@ -9,6 +9,7 @@ import { StatusBadge, WitnessMeter } from "@/components/StatusBadge";
 import { DEFAULT_ELECTION, type Election } from "@/lib/elections";
 import { formatTime } from "@/lib/format";
 import { t } from "@/lib/i18n";
+import { errorMessage, fetchJson } from "@/lib/http";
 import type { PartyDiff, UnitStatus } from "@/lib/schemas";
 
 type Hit = { id: string; code: string; name: string; ward: string; lga: string; state: string; is_simulated: boolean };
@@ -34,6 +35,8 @@ export function UnitCompare({ children }: { children: React.ReactNode }) {
   const [election, setElection] = useState<Election>(DEFAULT_ELECTION);
   const [cmp, setCmp] = useState<Comparison | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   // Debounced type-ahead.
   useEffect(() => {
@@ -43,12 +46,16 @@ export function UnitCompare({ children }: { children: React.ReactNode }) {
     const timer = window.setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await fetch(`/api/units/search?q=${encodeURIComponent(term)}`, { signal: ctrl.signal });
-        const body = (await res.json()) as { units?: Hit[] };
+        const body = await fetchJson<{ units?: Hit[] }>(`/api/units/search?q=${encodeURIComponent(term)}`, { signal: ctrl.signal }, "search.failed");
         setHits(body.units ?? []);
+        setSearchError(null);
         setOpen(true);
-      } catch {
-        /* aborted or offline: keep the last hits */
+      } catch (e) {
+        if (ctrl.signal.aborted) return; // replaced by a newer search
+        // Say so, rather than showing an empty list that reads as "no such unit".
+        setHits([]);
+        setSearchError(errorMessage(e, "search.failed"));
+        setOpen(true);
       } finally {
         setSearching(false);
       }
@@ -60,21 +67,20 @@ export function UnitCompare({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!unit) return;
     let active = true;
-    void fetch(`/api/compare?code=${encodeURIComponent(unit.code)}&election=${election}`)
-      .then(async (res) => {
-        const body = await res.json();
+    fetchJson<Comparison>(`/api/compare?code=${encodeURIComponent(unit.code)}&election=${election}`, undefined, "compare.failed")
+      .then((body) => {
         if (!active) return;
-        if (!res.ok) throw new Error(body.error ?? t("compare.failed"));
-        setCmp(body as Comparison);
+        setCmp(body);
         setError(null);
       })
-      .catch((e) => active && setError(e instanceof Error ? e.message : t("compare.failed")));
+      .catch((e: unknown) => active && setError(errorMessage(e, "compare.failed")));
     return () => { active = false; };
-  }, [unit, election]);
+  }, [unit, election, attempt]);
 
   function pick(h: Hit) {
     setUnit(h);
     setCmp(null);
+    setError(null);
     setQ(h.code);
     setOpen(false);
   }
@@ -83,6 +89,7 @@ export function UnitCompare({ children }: { children: React.ReactNode }) {
     setUnit(null);
     setCmp(null);
     setError(null);
+    setSearchError(null);
     setQ("");
     setHits([]);
   }
@@ -116,7 +123,7 @@ export function UnitCompare({ children }: { children: React.ReactNode }) {
 
         {open && q.trim().length >= 2 && !unit && (
           <ul id={listId} role="listbox" className="absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-border bg-surface p-1.5 shadow-lift animate-pop-in">
-            {hits.length === 0 && <li className="px-3 py-3 text-sm text-muted">{t("units.noMatch")}</li>}
+            {searchError ? <li role="alert" className="px-3 py-3 text-sm text-review-text">{searchError}</li> : hits.length === 0 && <li className="px-3 py-3 text-sm text-muted">{t("units.noMatch")}</li>}
             {hits.map((h) => (
               <li key={h.id} role="option" aria-selected={false}>
                 <button onMouseDown={(e) => e.preventDefault()} onClick={() => pick(h)} className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-surface-2">
@@ -141,7 +148,12 @@ export function UnitCompare({ children }: { children: React.ReactNode }) {
       ) : (
         <section className="flex flex-col gap-4 animate-rise">
           <ElectionTabs value={election} onChange={(e) => { setElection(e); setCmp(null); }} />
-          {error && <p role="alert" className="rounded-2xl bg-review-bg p-4 text-sm text-review-text">{error}</p>}
+          {error && (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-review-bg p-4 text-sm text-review-text">
+              <span>{error}</span>
+              <button type="button" onClick={() => { setError(null); setAttempt((n) => n + 1); }} className="btn btn-secondary min-h-9 text-xs">{t("error.retry")}</button>
+            </div>
+          )}
           {loading && <div className="h-40 animate-pulse rounded-2xl bg-surface-2" />}
           {cmp && (
             <>
